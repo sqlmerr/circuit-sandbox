@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Pixel Logic Circuits</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <canvas id="viewport"></canvas>
+
+  <div id="dock-left" class="dock">
+    <div id="panel-toolbar" class="panel" data-panel="toolbar">
+      <div class="panel-header"><span>Инструменты</span><button class="collapse-btn" title="Свернуть">▾</button></div>
+      <div class="panel-body">
+        <div id="tool-buttons">
+          <button id="tool-stamp" class="tool-btn" title="Штамп (P)">S</button>
+          <button id="tool-brush" class="tool-btn" title="Кисть (B)">B</button>
+          <button id="tool-pipette" class="tool-btn" title="Пипетка (I)">I</button>
+        </div>
+        <div class="row">
+          <button id="tool-clear" class="btn danger" title="Удалить всё полотно (нужно подтвердить)">Очистить</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="panel-stamps" class="panel" data-panel="stamps">
+      <div class="panel-header"><span>Штампы</span><button class="collapse-btn" title="Свернуть">▾</button></div>
+      <div class="panel-body"><div id="stamp-palette"></div></div>
+    </div>
+
+    <div id="panel-wires" class="panel" data-panel="wires">
+      <div class="panel-header"><span>Сети</span><button class="collapse-btn" title="Свернуть">▾</button></div>
+      <div class="panel-body"><div id="wire-palette"></div></div>
+    </div>
+  </div>
+
+  <div id="dock-right" class="dock">
+    <div id="panel-sim" class="panel" data-panel="sim">
+      <div class="panel-header"><span>Симуляция</span><button class="collapse-btn" title="Свернуть">▾</button></div>
+      <div class="panel-body">
+        <div class="row">
+          <button id="sim-play" class="btn">▶</button>
+          <button id="sim-step" class="btn">Step</button>
+          <button id="sim-reset" class="btn">Reset</button>
+        </div>
+        <label id="sim-speed">Speed
+          <input type="range" id="sim-speed-slider" min="1" max="60" value="10" />
+          <span id="sim-speed-val">10</span>
+        </label>
+      </div>
+    </div>
+
+    <div id="panel-view" class="panel" data-panel="view">
+      <div class="panel-header"><span>Вид</span><button class="collapse-btn" title="Свернуть">▾</button></div>
+      <div class="panel-body">
+        <div class="row">
+          <span class="row-label">Канвас</span>
+          <button id="view-zoom-out" class="btn" title="Отдалить (−)">−</button>
+          <button id="view-zoom-in" class="btn" title="Приблизить (+)">+</button>
+          <button id="view-fit" class="btn" title="Вписать схему в экран">Fit</button>
+        </div>
+        <div class="row">
+          <span class="row-label">Интерфейс</span>
+          <button id="ui-smaller" class="btn" title="Уменьшить интерфейс ([)">A−</button>
+          <button id="ui-bigger" class="btn" title="Увеличить интерфейс (])">A+</button>
+          <span id="ui-scale-val">100%</span>
+        </div>
+        <div class="row">
+          <button id="exp-png" class="btn" title="Скачать PNG (1)">PNG</button>
+          <button id="exp-json" class="btn" title="Скачать JSON (2)">JSON</button>
+          <button id="exp-svg" class="btn" title="Скачать SVG (3)">SVG</button>
+        </div>
+        <div class="row">
+          <button id="ui-hide" class="btn" title="Скрыть все панели (H)">Скрыть UI</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="dock-bottom" class="dock">
+    <div id="panel-errors" class="panel" data-panel="errors">
+      <div class="panel-header"><span>Ошибки</span><button class="collapse-btn" title="Свернуть">▾</button></div>
+      <div class="panel-body"><div id="error-list"></div></div>
+    </div>
+    <div id="panel-status" class="panel">
+      <span id="coords-display">X: — Y: —</span>
+    </div>
+  </div>
+
+  <button id="ui-show" title="Показать интерфейс (H)">☰</button>
+
+  <script type="module" src="/src/ui/main.ts"></script>
+</body>
+</html>
