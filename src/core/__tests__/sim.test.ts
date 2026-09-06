@@ -3,7 +3,15 @@ import { createSim, step, gateTruth } from "../sim";
 import type { IR } from "../types";
 
 function emptyIR(): IR {
-  return { width: 20, height: 20, gates: [], clocks: [], consts: [], dffs: [], bulbs: [] };
+  return {
+    width: 20,
+    height: 20,
+    netCount: 8,
+    gates: [],
+    clocks: [],
+    consts: [],
+    bulbs: [],
+  };
 }
 
 describe("sim: gates", () => {
@@ -33,19 +41,19 @@ describe("sim: gates", () => {
 });
 
 describe("sim: clock", () => {
-  it("produces a 10/5 square wave over 16 ticks", () => {
+  it("produces a 10-off / 10-on square wave", () => {
     const ir = emptyIR();
-    ir.clocks.push({ net: 0, period: 10, high: 5, cells: [] });
+    ir.clocks.push({ net: 0, cells: [] });
     const s = createSim(ir);
     const trace: number[] = [];
-    for (let t = 0; t < 16; t++) {
+    for (let t = 0; t < 25; t++) {
       step(s);
       trace.push(s.cur[0]); // out(t)
     }
-    // out(t) = (t mod 10) < 5 -> t=0..4 high, t=5..9 low
-    expect(trace.slice(0, 5)).toEqual([1, 1, 1, 1, 1]);
-    expect(trace.slice(5, 10)).toEqual([0, 0, 0, 0, 0]);
-    expect(trace[10]).toBe(1);
+    expect(trace.slice(0, 10)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(trace.slice(10, 20)).toEqual([1, 1, 1, 1, 1, 1, 1, 1, 1, 1]);
+    expect(trace[20]).toBe(0);
+    expect(trace[21]).toBe(0);
   });
 });
 
@@ -55,40 +63,6 @@ describe("sim: net without driver is 0", () => {
     expect(s.cur[3]).toBe(0);
     step(s);
     expect(s.cur[3]).toBe(0);
-  });
-});
-
-describe("sim: dff", () => {
-  it("captures D on the rising C edge and holds between edges", () => {
-    const ir = emptyIR();
-    ir.clocks.push({ net: 2, period: 4, high: 2, cells: [] }); // C: 1,1,0,0,1,1,...
-    ir.consts.push({ net: 3, value: 1, cells: [] }); // D held high
-    ir.dffs.push({ d: 3, c: 2, q: 4, cells: [] });
-    const s = createSim(ir);
-    const q: number[] = [];
-    for (let t = 0; t < 10; t++) {
-      step(s);
-      q.push(s.cur[4]); // Q(t)
-    }
-    // First rising edge is at t=4 (C goes 0->1). Before that Q=0.
-    expect(q.slice(0, 4)).toEqual([0, 0, 0, 0]);
-    expect(q[4]).toBe(1); // capture on rising edge
-    expect(q.slice(5)).toEqual(q.slice(5).map(() => 1)); // holds
-  });
-
-  it("captures D=0 on the rising edge and holds", () => {
-    const ir = emptyIR();
-    ir.clocks.push({ net: 2, period: 4, high: 2, cells: [] });
-    ir.consts.push({ net: 3, value: 0, cells: [] }); // D low
-    ir.dffs.push({ d: 3, c: 2, q: 4, cells: [] });
-    const s = createSim(ir);
-    const q: number[] = [];
-    for (let t = 0; t < 10; t++) {
-      step(s);
-      q.push(s.cur[4]); // Q(t)
-    }
-    expect(q[4]).toBe(0);
-    expect(q.every((v) => v === 0)).toBe(true);
   });
 });
 
@@ -114,16 +88,16 @@ describe("sim: two NOT ring oscillates", () => {
 describe("sim: determinism", () => {
   it("two runs of the same IR produce identical traces", () => {
     const ir = emptyIR();
-    ir.clocks.push({ net: 0, period: 4, high: 2, cells: [] });
+    ir.clocks.push({ net: 0, cells: [] });
     ir.gates.push({ type: "xor", ins: [0, 1], out: 2, cells: [] });
     ir.consts.push({ net: 1, value: 1, cells: [] });
-    ir.dffs.push({ d: 2, c: 0, q: 3, cells: [] });
+    ir.bulbs.push({ net: 2, cells: [] });
 
     const run = () => {
       const s = createSim(ir);
       const trace: number[] = [];
       for (let t = 0; t < 30; t++) {
-        trace.push(s.cur[3]);
+        trace.push(s.cur[2]);
         step(s);
       }
       return trace;

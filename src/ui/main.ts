@@ -47,19 +47,25 @@ function viewport(): Viewport {
 }
 
 function emptyIr() {
-  return { width: 0, height: 0, gates: [], clocks: [], consts: [], dffs: [], bulbs: [] };
+  return { width: 0, height: 0, netCount: 0, gates: [], clocks: [], consts: [], bulbs: [] };
 }
 
 // ---- dispatch ----
 let panels: PanelBind;
 function dispatch(a: Action): void {
   state = apply(state, a);
+  // запомнить выбранный инструмент (восстанавливается при перезагрузке)
+  if (a.kind === "tool") {
+    const p = loadPrefs();
+    p.tool = a.tool;
+    savePrefs(p);
+  }
   syncPanels();
 }
 
 function syncPanels(): void {
   panels.selectTool(state.tool);
-  panels.selectBrushNet(state.brushNet);
+  panels.selectBrushColor(state.brushColor);
   panels.setErrors([
     ...state.errors.map((e) => ({ severity: "error" as const, message: e.message, cells: e.cells })),
     ...state.warnings.map((w) => ({ severity: "warning" as const, message: w.message, cells: w.cells })),
@@ -76,8 +82,8 @@ function scheduleParse(): void {
 }
 function doParse(): void {
   parseTimer = null;
-  const { ir, errors, warnings } = parse(state.grid);
-  state = apply(state, { kind: "parse", ir, errors, warnings });
+  const { ir, errors, warnings, netMap } = parse(state.grid);
+  state = apply(state, { kind: "parse", ir, errors, warnings, netMap });
   simCtx.dirty = true;
   syncPanels();
 }
@@ -413,7 +419,11 @@ function loop(now: number): void {
 }
 
 resize();
-applyPrefs(loadPrefs());
+const prefs = loadPrefs();
+applyPrefs(prefs);
+// восстановить выбранный при прошлой сессии инструмент (кистью рисуем чаще,
+// поэтому по умолчанию — кисть)
+state = apply(state, { kind: "tool", tool: prefs.tool });
 syncPanels();
 // спавн камеры: вся схема по центру экрана
 fitView();

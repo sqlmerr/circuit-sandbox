@@ -1,11 +1,20 @@
 import { createGrid2D, setPixel, type Grid2D } from "../types";
+import { WIRE_INDEX } from "../palette";
 
 export function makeGrid(width: number, height: number): Grid2D {
   return createGrid2D(width, height);
 }
 
-export function wire(g: Grid2D, x: number, y: number, net: number): void {
-  setPixel(g, x, y, net + 2);
+export function wire(g: Grid2D, x: number, y: number): void {
+  setPixel(g, x, y, WIRE_INDEX);
+}
+
+export function hWire(g: Grid2D, x0: number, x1: number, y: number): void {
+  for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++) wire(g, x, y);
+}
+
+export function vWire(g: Grid2D, x: number, y0: number, y1: number): void {
+  for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) wire(g, x, y);
 }
 
 export function rect(

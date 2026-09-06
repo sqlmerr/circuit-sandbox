@@ -2,6 +2,7 @@ export interface UiPrefs {
   collapsed: Record<string, boolean>;
   uiScale: number;
   uiHidden: boolean;
+  tool: "stamp" | "brush" | "pipette";
 }
 
 const KEY = "pixel-logic-ui";
@@ -11,7 +12,7 @@ export const UI_SCALE_MAX = 1.6;
 export const UI_SCALE_STEP = 0.1;
 
 export function defaultPrefs(): UiPrefs {
-  return { collapsed: {}, uiScale: 1, uiHidden: false };
+  return { collapsed: {}, uiScale: 1, uiHidden: false, tool: "brush" };
 }
 
 export function loadPrefs(): UiPrefs {
@@ -23,6 +24,7 @@ export function loadPrefs(): UiPrefs {
       collapsed: p.collapsed ?? {},
       uiScale: clampScale(p.uiScale ?? 1),
       uiHidden: p.uiHidden ?? false,
+      tool: p.tool === "stamp" || p.tool === "pipette" || p.tool === "brush" ? p.tool : "brush",
     };
   } catch {
     return defaultPrefs();

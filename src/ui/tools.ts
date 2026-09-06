@@ -1,5 +1,6 @@
 import { setPixel, copyGrid2D, type Grid2D } from "../core/types";
-import type { State, Action } from "./state";
+import { WIRE_INDEX, LAST_DRAWABLE } from "../core/palette";
+import { ERASE_STAMP, type State, type Action } from "./state";
 
 function clone(s: State): Grid2D {
   return copyGrid2D(s.grid);
@@ -17,6 +18,11 @@ export function stampGrid(s: State, gx: number, gy: number): Grid2D | null {
       const x = gx + dx;
       const y = gy + dy;
       if (x < 0 || y < 0 || x >= g.width || y >= g.height) continue;
+      if (px === ERASE_STAMP) {
+        if (g.data[y * g.width + x] !== 0) changed = true;
+        setPixel(g, x, y, 0);
+        continue;
+      }
       if (g.data[y * g.width + x] !== px) changed = true;
       setPixel(g, x, y, px);
     }
@@ -27,7 +33,7 @@ export function stampGrid(s: State, gx: number, gy: number): Grid2D | null {
 
 export function brushAt(s: State, gx: number, gy: number): Grid2D | null {
   if (gx < 0 || gy < 0 || gx >= s.grid.width || gy >= s.grid.height) return null;
-  const idx = s.brushNet + 2;
+  const idx = s.brushColor;
   if (s.grid.data[gy * s.grid.width + gx] === idx) return null;
   const g = clone(s);
   setPixel(g, gx, gy, idx);
@@ -45,8 +51,8 @@ export function eraseAt(s: State, gx: number, gy: number): Grid2D | null {
 export function pipette(s: State, gx: number, gy: number): Action | null {
   if (gx < 0 || gy < 0 || gx >= s.grid.width || gy >= s.grid.height) return null;
   const idx = s.grid.data[gy * s.grid.width + gx];
-  if (idx >= 2 && idx <= 9) {
-    return { kind: "brushNet", net: idx - 2 };
+  if (idx >= WIRE_INDEX && idx <= LAST_DRAWABLE) {
+    return { kind: "brushColor", color: idx };
   }
   return null;
 }

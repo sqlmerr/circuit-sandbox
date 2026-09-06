@@ -1,47 +1,44 @@
-import { makeGrid, rect, wire, vWire } from "./util";
+import { makeGrid, rect, wire, hWire, vWire } from "./util";
 import type { Grid2D } from "../core/types";
 
-const XOR = 12;
-const AND = 10;
-const HIGH = 15;
-const BULB = 18;
+const XOR = 5;
+const AND = 3;
+const HIGH = 8;
+const BULB = 10;
 
 // Полусумматор: XOR (сумма) + AND (перенос).
-// Входы A (net0) и B (net1) — HIGH-источники (тумблеры через runtime-toggle).
+// Входы A и B — HIGH-источники (переключаются кликом в run-режиме).
+//
+// Все провода одного цвета: сеть = связная область (см. util.ts). Поэтому
+// разных сети разведены колонками с зазорами, а два обязательных пересечения
+// сделаны перекрёстками "+" — парсер читает у них H и V как разные сети:
+//   (6,10) — столбец A пересекает шину B,
+//   (10,8) — столбец B пересекает шину A.
 export function halfAdder(): Grid2D {
-  const g = makeGrid(20, 16);
+  const g = makeGrid(22, 14);
 
-  // гейты
-  rect(g, 6, 4, XOR, 4, 3); // XOR x6-9 y4-6
-  rect(g, 6, 9, AND, 4, 3); // AND x6-9 y9-11
+  rect(g, 1, 2, HIGH, 3, 3); // HIGH_A x1-3 y2-4, E=4
+  rect(g, 1, 8, HIGH, 3, 3); // HIGH_B x1-3 y8-10, E=4
+  rect(g, 12, 2, XOR, 4, 3); // XOR x12-15 y2-4
+  rect(g, 12, 8, AND, 4, 3); // AND x12-15 y8-10
+  rect(g, 17, 2, BULB, 3, 3); // сумма x17-19 y2-4, W=16
+  rect(g, 17, 8, BULB, 3, 3); // перенос x17-19 y8-10, W=16
 
-  // входы A=net0, B=net1
-  rect(g, 1, 3, HIGH, 3, 3); // HIGH_A x1-3 y3-5, E x=4
-  rect(g, 1, 7, HIGH, 3, 3); // HIGH_B x1-3 y7-9, E x=4
+  // сеть A: HIGH_A.E(4,3) -> вниз по x=6 -> вправо к XOR.W(11,2) и AND.W(11,8)
+  hWire(g, 4, 6, 3);
+  vWire(g, 6, 2, 12);
+  hWire(g, 6, 11, 2);
+  hWire(g, 6, 11, 8);
 
-  // net0: HIGH_A.E(4,4) -> XOR.W(5,4) -> вниз -> AND.W(5,9)
-  wire(g, 4, 4, 0);
-  wire(g, 5, 4, 0);
-  vWire(g, 5, 4, 9, 0);
+  // сеть B: HIGH_B.E(4,10) -> вправо -> вверх по x=10 -> XOR.W(11,4) и AND.W(11,10)
+  hWire(g, 4, 11, 10);
+  vWire(g, 10, 4, 10); // НЕ продлевать ниже y10 — там шина B сама по себе (самопересечение!)
+  hWire(g, 10, 11, 4);
 
-  // net1: HIGH_B.E(4,8) -> вверх к XOR.W(5,5), и вниз к AND.W(5,10)
-  // (идём по x=4 только с y=6, чтобы не задеть HIGH_A)
-  wire(g, 4, 8, 1);
-  vWire(g, 4, 6, 8, 1);
-  wire(g, 5, 6, 1);
-  wire(g, 5, 5, 1);
-  vWire(g, 4, 8, 10, 1);
-  wire(g, 5, 10, 1);
-
-  // сумма net2: XOR.E -> лампочка
-  wire(g, 10, 5, 2);
-  wire(g, 11, 5, 2);
-  rect(g, 12, 4, BULB, 3, 3); // x12-14 y4-6, W x=11
-
-  // перенос net3: AND.E -> лампочка
-  wire(g, 10, 9, 3);
-  wire(g, 11, 9, 3);
-  rect(g, 12, 8, BULB, 3, 3); // x12-14 y8-10, W x=11
+  // сумма: XOR.E(16,3) -> лампочка
+  wire(g, 16, 3);
+  // перенос: AND.E(16,9) -> лампочка
+  wire(g, 16, 9);
 
   return g;
 }

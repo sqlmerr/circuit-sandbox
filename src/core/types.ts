@@ -22,11 +22,11 @@ export type ErrorCode =
   | "ERR_BODY_NOT_RECT"
   | "ERR_BODY_SIZE"
   | "ERR_PINS_MISMATCH"
-  | "ERR_MULTI_DRIVER"
   | "ERR_SOURCE_TWO_NETS"
-  | "ERR_CLOCK_SIZE"
+  | "ERR_PORT"
   | "WARN_NO_DRIVER"
-  | "WARN_IDLE_NET";
+  | "WARN_IDLE_NET"
+  | "WARN_PORT_INCOMPLETE";
 
 export interface ParseError {
   code: ErrorCode;
@@ -45,21 +45,12 @@ export interface Gate {
 
 export interface Clock {
   net: number;
-  period: number;
-  high: number;
   cells: [number, number][];
 }
 
 export interface Const {
   net: number;
   value: 0 | 1;
-  cells: [number, number][];
-}
-
-export interface Dff {
-  d: number;
-  c: number;
-  q: number;
   cells: [number, number][];
 }
 
@@ -71,10 +62,10 @@ export interface Bulb {
 export interface IR {
   width: number;
   height: number;
+  netCount: number;
   gates: Gate[];
   clocks: Clock[];
   consts: Const[];
-  dffs: Dff[];
   bulbs: Bulb[];
 }
 
@@ -82,6 +73,7 @@ export interface ParseResult {
   ir: IR;
   errors: ParseError[];
   warnings: ParseError[];
+  netMap: Int32Array;
 }
 
 export interface SimState {

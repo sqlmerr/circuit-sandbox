@@ -1,23 +1,34 @@
 import { encodePNG, gridFromRGBA } from "../core/png";
 import { toSvg } from "../core/svg";
 import { createGrid2D, type Grid2D } from "../core/types";
+import { migrateV2 } from "../core/palette";
 
 export const SIZE_MIN = 16;
 export const SIZE_MAX = 512;
 export const SIZE_DEFAULT = 128;
 
-const LS_KEY = "pixel-logic-grid";
+// v3: DFF удалён из палитры (бывший индекс 10 → unknown, бывший 11 → 10).
+const LS_KEY = "pixel-logic-grid-v3";
+const LS_KEY_V2 = "pixel-logic-grid-v2";
 
 export function saveToLocal(grid: Grid2D): void {
   try {
     localStorage.setItem(LS_KEY, encodeBase64(grid.data));
+    localStorage.removeItem(LS_KEY_V2);
   } catch {
     /* ignore */
   }
 }
 
 export function loadFromLocal(): Grid2D | null {
-  const raw = localStorage.getItem(LS_KEY);
+  // старый v2-массив мигрируем в v3 (индексы 10→1, 11→10) и пересохраняем
+  const g = readLocal(LS_KEY) ?? migrateLocalV2();
+  if (g) saveToLocal(g);
+  return g;
+}
+
+function readLocal(key: string): Grid2D | null {
+  const raw = localStorage.getItem(key);
   if (!raw) return null;
   try {
     const bytes = decodeBase64(raw);
@@ -30,16 +41,26 @@ export function loadFromLocal(): Grid2D | null {
   }
 }
 
+function migrateLocalV2(): Grid2D | null {
+  const raw = localStorage.getItem(LS_KEY_V2);
+  if (!raw) return null;
+  const g = readLocal(LS_KEY_V2);
+  if (!g) return null;
+  g.data = migrateV2(g.data);
+  return g;
+}
+
 export function clearLocal(): void {
   try {
     localStorage.removeItem(LS_KEY);
+    localStorage.removeItem(LS_KEY_V2);
   } catch {
     /* ignore */
   }
 }
 
 export function downloadPNG(grid: Grid2D, title = "circuit"): void {
-  const bytes = encodePNG(grid, { format: "pixel-logic", version: "1", title });
+  const bytes = encodePNG(grid, { format: "pixel-logic", version: "3", title });
   const buf = bytes.slice().buffer as ArrayBuffer;
   const blob = new Blob([buf], { type: "image/png" });
   downloadBlob(blob, `${title}.png`);
@@ -48,7 +69,7 @@ export function downloadPNG(grid: Grid2D, title = "circuit"): void {
 export function downloadJSON(grid: Grid2D): void {
   const payload = {
     format: "pixel-logic",
-    version: 1 as const,
+    version: 3 as const,
     width: grid.width,
     height: grid.height,
     pixels: encodeBase64(grid.data),
@@ -66,12 +87,18 @@ export async function openFile(file: File): Promise<Grid2D> {
   if (file.name.toLowerCase().endsWith(".json")) {
     const text = await file.text();
     const parsed = JSON.parse(text) as {
+      format?: string;
+      version?: number;
       width?: number;
       height?: number;
       pixels?: string;
     };
+    if (parsed.version !== 2 && parsed.version !== 3) {
+      throw new Error("Несовместимый формат: нужен pixel-logic v3 (номера цветов изменились)");
+    }
     if (!parsed.pixels) throw new Error("Некорректный JSON");
-    const bytes = decodeBase64(parsed.pixels);
+    let bytes = decodeBase64(parsed.pixels);
+    if (parsed.version === 2) bytes = migrateV2(bytes); // 10→unknown, 11→bulb(10)
     const w = clamp(parsed.width ?? SIZE_DEFAULT, SIZE_MIN, SIZE_MAX);
     const h = clamp(parsed.height ?? SIZE_DEFAULT, SIZE_MIN, SIZE_MAX);
     const g = createGrid2D(w, h);

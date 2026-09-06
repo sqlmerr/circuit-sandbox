@@ -1,4 +1,4 @@
-import { toHex, WIRE_COUNT } from "../core/palette";
+import { toHex, PALETTE, WIRE_INDEX, roleOf } from "../core/palette";
 import type { Action, StampType, ToolName } from "./state";
 import { STAMP_DEFS } from "./state";
 import { loadPrefs, savePrefs } from "./prefs";
@@ -8,7 +8,7 @@ import pipetteIcon from "../assets/pipette.svg?raw";
 
 export interface PanelBind {
   selectTool: (t: ToolName) => void;
-  selectBrushNet: (net: number) => void;
+  selectBrushColor: (color: number) => void;
   selectStamp: (t: StampType) => void;
   setErrors: (errors: { severity: "error" | "warning"; message: string; cells: [number, number][] }[]) => void;
   setCoords: (x: number, y: number) => void;
@@ -41,16 +41,19 @@ export function buildPanels(dispatch: PanelDispatch): PanelBind {
   }
 
   const stampsPanel = el("panel-stamps");
+  const wiresPanel = el("panel-wires");
 
+  // Палитра рисования: провод + цвета тел компонентов. Кисть пишет любым
+  // из этих цветов — так тела можно рисовать прямо кистью, без штампа.
   const wirePal = el("wire-palette");
-  for (let net = 0; net < WIRE_COUNT; net++) {
-    const idx = net + 2;
+  for (let idx = WIRE_INDEX; idx < PALETTE.length; idx++) {
+    const color = idx;
     const sw = document.createElement("button");
     sw.className = "swatch";
-    sw.dataset.net = String(net);
-    sw.title = `Сеть ${net}`;
-    sw.innerHTML = `<span style="background:${toHex(idx)}"></span>`;
-    sw.addEventListener("click", () => dispatch({ kind: "brushNet", net }));
+    sw.dataset.color = String(color);
+    sw.title = toHex(color) + " — " + roleOf(color);
+    sw.innerHTML = `<span style="background:${toHex(color)}"></span>`;
+    sw.addEventListener("click", () => dispatch({ kind: "brushColor", color }));
     wirePal.appendChild(sw);
   }
 
@@ -88,12 +91,14 @@ export function buildPanels(dispatch: PanelDispatch): PanelBind {
       for (const [tool, btn] of Object.entries(toolBtns)) {
         btn.classList.toggle("active", tool === t);
       }
-      // меню штампов видно только при активном инструменте штампа
+      // меню штампов видно только при активном инструменте штампа;
+      // палитра «Цвета» — только при активной кисти
       stampsPanel.classList.toggle("hidden", t !== "stamp");
+      wiresPanel.classList.toggle("hidden", t !== "brush");
     },
-    selectBrushNet(net) {
+    selectBrushColor(color) {
       for (const s of wirePal.querySelectorAll<HTMLButtonElement>("button.swatch")) {
-        s.classList.toggle("active", Number(s.dataset.net) === net);
+        s.classList.toggle("active", Number(s.dataset.color) === color);
       }
     },
     selectStamp(t) {
