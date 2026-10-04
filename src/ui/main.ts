@@ -155,6 +155,8 @@ canvas.addEventListener("mousemove", (e) => {
   }
 
   state = apply(state, { kind: "ghostPos", x: gx, y: gy });
+  // ПКМ тянет — стирает, значит призрак кисти показывает «стереть», а не цвет
+  state = apply(state, { kind: "ghostErase", on: e.buttons === 2 });
   panels.setCoords(gx, gy);
 
   // ЛКМ тянет — рисует кистью, ПКМ тянет — стирает
@@ -185,6 +187,8 @@ canvas.addEventListener("mousedown", (e) => {
   // right button: erase (no camera pan)
   if (e.button === 2) {
     if (inEdit()) commitEdit(tools.eraseAt(state, gx, gy));
+    state = apply(state, { kind: "ghostErase", on: true });
+    render(viewport(), state, canvas, ctx);
     return;
   }
 
@@ -275,10 +279,12 @@ window.addEventListener("keyup", (e) => {
 
 window.addEventListener("mouseup", () => {
   panning = false;
+  state = apply(state, { kind: "ghostErase", on: false });
 });
 window.addEventListener("blur", () => {
   panning = false;
   spaceDown = false;
+  state = apply(state, { kind: "ghostErase", on: false });
 });
 
 // ---- sim UI ----

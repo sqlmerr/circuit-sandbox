@@ -1,5 +1,7 @@
 import { roleOf, WIRE_INDEX } from "./palette";
 import type { Role } from "./palette";
+import { matchesShape, shapeForRole, shapePorts } from "./shapes";
+import type { ShapePorts, Side as ShapeSide } from "./shapes";
 import type { Grid2D, ParseResult, ParseError, IR } from "./types";
 
 const COMPONENT_ROLES = new Set<Role>([
@@ -20,6 +22,17 @@ interface Pin {
   net: number;
   cx: number;
   cy: number;
+}
+
+// Тело, прошедшее проверку формы/размера, с его пинами, маркером выхода и
+// портами (роли сторон).
+interface BodyEntry {
+  bodyIdx: number;
+  role: Role;
+  body: [number, number][];
+  pins: Pin[];
+  marker: { net: number; cells: [number, number][] } | null;
+  ports: ShapePorts;
 }
 
 const DIRS: [number, number][] = [
@@ -143,6 +156,92 @@ function bodyBBox(body: [number, number][]): {
 
 function isWireIdx(idx: number): boolean {
   return roleOf(idx) === "wire";
+}
+
+// Bitmap тела по его bbox: 1 — клетка тела, 0 — пусто (нужен для сверки с
+// каноничной фигурой роли).
+function bodyBitmap(
+  body: [number, number][],
+  width: number,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): number[][] {
+  const cells = new Set(body.map(([x, y]) => y * width + x));
+  const bitmap: number[][] = [];
+  for (let y = minY; y <= maxY; y++) {
+    const row: number[] = [];
+    for (let x = minX; x <= maxX; x++) row.push(cells.has(y * width + x) ? 1 : 0);
+    bitmap.push(row);
+  }
+  return bitmap;
+}
+
+const OPPOSITE_SIDE: Record<Side, Side> = { N: "S", S: "N", E: "W", W: "E" };
+
+// Роли по сторонам света (legacy): сплошные прямоугольники и симметричные
+// фигуры ориентируются именно так.
+const LEGACY_PORTS: ShapePorts = { inputs: ["W", "N"], outputs: ["E", "S"] };
+
+// Разводка пинов на входы и выходы: маркер выхода = единственный выход,
+// остальные прямые пины — входы (explicit-режим); без маркера стороны пинов
+// задаются фигурой тела, а для сплошных прямоугольников — правилом по
+// сторонам света (legacy: W/N — входы, E/S — выходы).
+function splitPins(e: BodyEntry, ports: ShapePorts): { inputs: Pin[]; outputs: Pin[] } {
+  if (e.marker) {
+    return {
+      inputs: [...e.pins].sort((a, b) => a.cy - b.cy || a.cx - b.cx),
+      outputs: [
+        { side: "E", net: e.marker.net, cx: e.marker.cells[0][0], cy: e.marker.cells[0][1] },
+      ],
+    };
+  }
+  return {
+    inputs: sortBySide(e.pins.filter((p) => ports.inputs.includes(p.side as ShapeSide)), ports.inputs),
+    outputs: sortBySide(e.pins.filter((p) => ports.outputs.includes(p.side as ShapeSide)), ports.outputs),
+  };
+}
+
+// Порядок пинов детерминированный: сначала по порядку сторон, затем вдоль
+// стороны (по y для E/W, по x для N/S).
+function sortBySide(pins: Pin[], sides: ShapeSide[]): Pin[] {
+  const rank = (s: Side) => {
+    const i = sides.indexOf(s as ShapeSide);
+    return i === -1 ? sides.length : i;
+  };
+  return [...pins].sort(
+    (a, b) =>
+      rank(a.side) - rank(b.side) ||
+      (a.side === "N" || a.side === "S" ? a.cx - b.cx : a.cy - b.cy),
+  );
+}
+
+// Пины на сторонах, которым фигура портов не назначила роли, — ошибка:
+// иначе провод молча ничего не делал бы.
+function strayPins(e: BodyEntry, ports: ShapePorts): Pin[] {
+  const allowed = new Set<ShapeSide>([...ports.inputs, ...ports.outputs]);
+  return e.pins.filter((p) => !allowed.has(p.side as ShapeSide));
+}
+
+/**
+ * Ориентация 1-входного гейта выводится из разводки: у него четыре
+ * симметричных отростка, поэтому входом становится тот пин, чью сеть приводит
+ * кто-то ещё (источник или выход другого гейта), а выходом — отросток на
+ * противоположной стороне. Если таких пинов нет или их несколько (например, в
+ * кольце из двух NOT, где сети приводят друг друга) — возвращается null и
+ * вызывающий код берёт legacy-правило по сторонам.
+ */
+function pickNotPorts(
+  pins: Pin[],
+  drivenByOthers: (net: number) => boolean,
+): { inputs: Pin[]; outputs: Pin[] } | null {
+  const fed = pins.filter((p) => drivenByOthers(p.net));
+  if (pins.length < 2 || fed.length !== 1) return null;
+  const input = fed[0];
+  const rest = pins.filter((p) => p !== input);
+  const output = rest.find((p) => p.side === OPPOSITE_SIDE[input.side]) ?? rest[0];
+  return { inputs: [input], outputs: [output] };
 }
 
 // Строит сеть через union-find с обработкой +-перекрёстков и мостов.
@@ -426,6 +525,85 @@ export function parse(grid: Grid2D): ParseResult {
   }
 
   const pinnedNets = new Set<number>();
+  // Кто приводит сеть: сеть → индексы тел. Нужен гейтам с 1 входом (у них
+  // вход/выход определяется разводкой) и наполняется по мере разбора тел.
+  const drivenBy = new Map<number, Set<number>>();
+  const markDriven = (net: number, bodyIdx: number): void => {
+    const set = drivenBy.get(net);
+    if (set) set.add(bodyIdx);
+    else drivenBy.set(net, new Set([bodyIdx]));
+  };
+
+  // Валидирует пины тела по его типу и кладёт компонент в IR.
+  // Возвращает сеть, которую тело приводит само, либо null при ошибке.
+  const emit = (e: BodyEntry, inputs: Pin[], outputs: Pin[]): number | null => {
+    const inputNets = inputs.map((p) => p.net);
+    const outputNets = outputs.map((p) => p.net);
+    switch (e.role) {
+      case "and":
+      case "or":
+      case "xor":
+      case "not": {
+        const inCount = e.role === "not" ? 1 : 2;
+        if (inputs.length !== inCount || outputs.length !== 1) {
+          errors.push({
+            code: "ERR_PINS_MISMATCH",
+            message: `Гейт ${e.role.toUpperCase()}: ожидается ${inCount} вход(ов) и 1 выход`,
+            cells: e.body,
+          });
+          return null;
+        }
+        ir.gates.push({ type: e.role, ins: inputNets, out: outputNets[0], cells: e.body });
+        return outputNets[0];
+      }
+      case "bulb": {
+        if (inputs.length !== 1 || outputs.length !== 0) {
+          errors.push({
+            code: "ERR_PINS_MISMATCH",
+            message: "Лампочка: ожидается 1 вход и 0 выходов",
+            cells: e.body,
+          });
+          return null;
+        }
+        ir.bulbs.push({ net: inputNets[0], cells: e.body });
+        return null;
+      }
+      case "clock":
+      case "high":
+      case "low": {
+        const distinctNets = new Set(e.pins.map((p) => p.net));
+        if (distinctNets.size > 1) {
+          errors.push({
+            code: "ERR_SOURCE_TWO_NETS",
+            message: "Источник касается двух разных сетей",
+            cells: e.body,
+          });
+          return null;
+        }
+        if (inputs.length !== 0 || outputs.length !== 1) {
+          errors.push({
+            code: "ERR_PINS_MISMATCH",
+            message: `Источник ${e.role.toUpperCase()}: ожидается 1 выход и 0 входов`,
+            cells: e.body,
+          });
+          return null;
+        }
+        const net = outputNets[0];
+        if (e.role === "clock") {
+          ir.clocks.push({ net, cells: e.body });
+        } else {
+          ir.consts.push({ net, value: e.role === "high" ? 1 : 0, cells: e.body });
+        }
+        return net;
+      }
+      default:
+        return null;
+    }
+  };
+
+  // Гейты с 1 входом (NOT) без маркера выхода ждут второго прохода: их
+  // ориентация выводится из разводки, поэтому нужен список драйверов сетей.
+  const pending1in: BodyEntry[] = [];
 
   for (let bodyIdx = 0; bodyIdx < bodies.length; bodyIdx++) {
     const body = bodies[bodyIdx];
@@ -434,23 +612,33 @@ export function parse(grid: Grid2D): ParseResult {
     const w = maxDim(body, "w");
     const h = maxDim(body, "h");
     const { minX, minY, maxX, maxY } = bodyBBox(body);
+    // Тело — либо сплошной прямоугольник (legacy: так нарисованы старые схемы
+    // и демо), либо каноничная фигура своей роли в одном из четырёх поворотов.
     const solid = (maxX - minX + 1) * (maxY - minY + 1) === body.length;
-
-    if (!solid) {
+    const shape = shapeForRole(role);
+    const bitmap = solid ? null : bodyBitmap(body, width, minX, minY, maxX, maxY);
+    const knownShape = bitmap !== null && shape !== null && matchesShape(bitmap, shape);
+    // Порты фигуры идут за нарисованными отростками, поэтому поворот гейта
+    // остаётся осмысленным. У симметричной фигуры (крест NOT) отростков с
+    // разрывом нет — там роли решает разводка (см. pickNotPorts), а по
+    // умолчанию берутся стороны света, как у сплошного прямоугольника.
+    const drawnPorts = knownShape && bitmap ? shapePorts(bitmap) : null;
+    const ports: ShapePorts = drawnPorts && drawnPorts.inputs.length > 0 ? drawnPorts : LEGACY_PORTS;
+    if (!solid && !knownShape) {
       errors.push({
         code: "ERR_BODY_NOT_RECT",
-        message: "Область тела не является сплошным прямоугольником",
+        message: "Область тела не является сплошным прямоугольником или фигурой гейта",
         cells: body,
       });
       continue;
     }
 
-    let sizeOk = w >= 2 && w <= 32 && h >= 2 && h <= 32;
-    let sizeMsg = "Размер тела 2×2..32×32";
-    if (!sizeOk) {
+    // У каноничной фигуры размер зафиксирован самой фигурой (3×3), поэтому
+    // диапазон 2..32 проверяется только для сплошных прямоугольников.
+    if (solid && (w < 2 || w > 32 || h < 2 || h > 32)) {
       errors.push({
         code: "ERR_BODY_SIZE",
-        message: sizeMsg,
+        message: "Размер тела 2×2..32×32",
         cells: body,
       });
       continue;
@@ -474,90 +662,55 @@ export function parse(grid: Grid2D): ParseResult {
 
     // explicit-режим (сеть маркера = единственный выход, входы — только прямые
     // пины в любом направлении) или legacy (роли по сторонам).
-    let inputs: Pin[];
-    let outputs: Pin[];
-    if (marker) {
-      if (pins.some((p) => p.net === marker.net)) {
-        errors.push({
-          code: "ERR_PORT",
-          message: "Сеть маркера выхода также напрямую касается тела",
-          cells: body,
-        });
-        continue;
-      }
-      inputs = [...pins].sort((a, b) => a.cy - b.cy || a.cx - b.cx);
-      outputs = [
-        { side: "E", net: marker.net, cx: marker.cells[0][0], cy: marker.cells[0][1] },
-      ];
-    } else {
-      inputs = pins.filter((p) => p.side === "W" || p.side === "N");
-      outputs = pins.filter((p) => p.side === "E" || p.side === "S");
-      inputs.sort((a, b) => (a.side === b.side ? a.cy - b.cy : a.side === "W" ? -1 : 1));
-      outputs.sort((a, b) => (a.side === b.side ? a.cy - b.cy : a.side === "E" ? -1 : 1));
+    if (marker && pins.some((p) => p.net === marker.net)) {
+      errors.push({
+        code: "ERR_PORT",
+        message: "Сеть маркера выхода также напрямую касается тела",
+        cells: body,
+      });
+      continue;
     }
-    const inputNets = inputs.map((p) => p.net);
-    const outputNets = outputs.map((p) => p.net);
 
-    switch (role) {
-      case "and":
-      case "or":
-      case "xor":
-      case "not": {
-        const inCount = role === "not" ? 1 : 2;
-        if (inputs.length !== inCount || outputs.length !== 1) {
-          errors.push({
-            code: "ERR_PINS_MISMATCH",
-            message: `Гейт ${role.toUpperCase()}: ожидается ${inCount} вход(ов) и 1 выход`,
-            cells: body,
-          });
-          continue;
-        }
-        ir.gates.push({ type: role, ins: inputNets, out: outputNets[0], cells: body });
-        break;
-      }
-      case "bulb": {
-        if (inputs.length !== 1 || outputs.length !== 0) {
-          errors.push({
-            code: "ERR_PINS_MISMATCH",
-            message: "Лампочка: ожидается 1 вход и 0 выходов",
-            cells: body,
-          });
-          continue;
-        }
-        ir.bulbs.push({ net: inputNets[0], cells: body });
-        break;
-      }
-      case "clock":
-      case "high":
-      case "low": {
-        const distinctNets = new Set(pins.map((p) => p.net));
-        if (distinctNets.size > 1) {
-          errors.push({
-            code: "ERR_SOURCE_TWO_NETS",
-            message: "Источник касается двух разных сетей",
-            cells: body,
-          });
-          continue;
-        }
-        if (inputs.length !== 0 || outputs.length !== 1) {
-          errors.push({
-            code: "ERR_PINS_MISMATCH",
-            message: `Источник ${role.toUpperCase()}: ожидается 1 выход и 0 входов`,
-            cells: body,
-          });
-          continue;
-        }
-        const net = outputNets[0];
-        if (role === "clock") {
-          ir.clocks.push({ net, cells: body });
-        } else {
-          ir.consts.push({ net, value: role === "high" ? 1 : 0, cells: body });
-        }
-        break;
-      }
-      default:
-        break;
+    const entry: BodyEntry = { bodyIdx, role, body, pins, marker: marker ?? null, ports };
+    if (!marker && strayPins(entry, ports).length > 0) {
+      errors.push({
+        code: "ERR_PINS_MISMATCH",
+        message: `Провод касается ${role.toUpperCase()} сбоку — у фигуры нет отростка на этой стороне`,
+        cells: strayPins(entry, ports).flatMap((p) => [[p.cx, p.cy] as [number, number]]),
+      });
+      continue;
     }
+    if (role === "not" && !marker) {
+      pending1in.push(entry);
+      continue;
+    }
+
+    const { inputs, outputs } = splitPins(entry, ports);
+    const drivenNet = emit(entry, inputs, outputs);
+    if (drivenNet !== null) markDriven(drivenNet, bodyIdx);
+  }
+
+  // Второй проход: 1-входные гейты. Вход — тот пин, чью сеть приводит кто-то
+  // ещё (источник или выход другого гейта), выход — противоположный отросток.
+  for (const entry of pending1in) {
+    const drivenByOthers = (net: number): boolean => {
+      const drivers = drivenBy.get(net);
+      if (!drivers) return false;
+      for (const driverIdx of drivers) if (driverIdx !== entry.bodyIdx) return true;
+      return false;
+    };
+    const { inputs, outputs } =
+      pickNotPorts(entry.pins, drivenByOthers) ?? splitPins(entry, entry.ports);
+    if (inputs.length === 1 && outputs.length === 1 && inputs[0].net === outputs[0].net) {
+      errors.push({
+        code: "ERR_PINS_MISMATCH",
+        message: "NOT: вход и выход оказались на одной сети",
+        cells: entry.body,
+      });
+      continue;
+    }
+    const drivenNet = emit(entry, inputs, outputs);
+    if (drivenNet !== null) markDriven(drivenNet, entry.bodyIdx);
   }
 
   const driverMap = collectDrivers(ir);

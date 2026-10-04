@@ -1,5 +1,6 @@
 import { createGrid2D, setPixel, type Grid2D } from "../types";
 import { WIRE_INDEX } from "../palette";
+import { stampGateBody } from "../shapes";
 
 export function makeGrid(width: number, height: number): Grid2D {
   return createGrid2D(width, height);
@@ -30,4 +31,12 @@ export function rect(
       setPixel(g, x0 + dx, y0 + dy, idx);
     }
   }
+}
+
+/**
+ * Тело гейта индексом idx в каноничной для его роли фигуре, начиная с (x0, y0).
+ * `rot` — число поворотов на 90° по часовой стрелке.
+ */
+export function gate(g: Grid2D, x0: number, y0: number, idx: number, rot = 0): void {
+  stampGateBody(g, x0, y0, idx, rot);
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parse } from "../parse";
 import { createSim, step } from "../sim";
-import { makeGrid, rect, wire, hWire } from "./helpers";
+import { makeGrid, rect, wire, hWire, gate } from "./helpers";
 
 const AND = 3;
 const OR = 4;
@@ -401,6 +401,197 @@ describe("parse: pin-out marker (rotated structures)", () => {
     expect(errors.some((e) => e.code === "ERR_PORT")).toBe(false);
     expect(warnings.some((w) => w.code === "WARN_PORT_INCOMPLETE")).toBe(true);
     // legacy-обработка тела (без пинов) уже даёт ошибку пинов — не маркерную
+  });
+});
+
+describe("parse: фигура гейта 2 входа / 1 выход", () => {
+  it("узнаёт каноничную фигуру: два западных отростка — входы, восточный — выход", () => {
+    const g = makeGrid(20, 20);
+    gate(g, 5, 5, AND); // 110/011/110
+    wire(g, 4, 5); // верхний вход
+    wire(g, 4, 7); // нижний вход (зазор в (4,6) — разные сети)
+    wire(g, 8, 6); // выход
+    const { ir, errors, warnings } = parse(g);
+    expect(errors).toHaveLength(0);
+    expect(warnings.every((w) => w.code === "WARN_NO_DRIVER")).toBe(true);
+    expect(ir.gates).toHaveLength(1);
+    expect(ir.gates[0].ins).toEqual([0, 2]);
+    expect(ir.gates[0].out).toBe(1);
+  });
+
+  it("поворот на 90°: входы на севере, выход на юге", () => {
+    const g = makeGrid(20, 20);
+    gate(g, 5, 5, AND, 1); // 101/111/010
+    wire(g, 5, 4);
+    wire(g, 7, 4); // зазор в (6,4) — разные сети
+    wire(g, 6, 8);
+    const { ir, errors } = parse(g);
+    expect(errors).toHaveLength(0);
+    expect(ir.gates).toHaveLength(1);
+    expect(ir.gates[0].ins).toEqual([0, 1]);
+    expect(ir.gates[0].out).toBe(2);
+  });
+
+  it("поворот на 180°: входы на востоке, выход на западе (порты следуют за фигурой)", () => {
+    const g = makeGrid(20, 20);
+    gate(g, 5, 5, AND, 2); // 011/110/011
+    wire(g, 8, 5);
+    wire(g, 8, 7); // зазор в (8,6) — разные сети
+    wire(g, 4, 6);
+    const { ir, errors } = parse(g);
+    expect(errors).toHaveLength(0);
+    expect(ir.gates[0].ins).toEqual([0, 2]);
+    expect(ir.gates[0].out).toBe(1);
+  });
+
+  it("поворот на 270°: входы на юге, выход на севере", () => {
+    const g = makeGrid(20, 20);
+    gate(g, 5, 5, AND, 3); // 010/111/101
+    wire(g, 5, 8);
+    wire(g, 7, 8);
+    wire(g, 6, 4);
+    const { ir, errors } = parse(g);
+    expect(errors).toHaveLength(0);
+    expect(ir.gates[0].ins).toEqual([1, 2]);
+    expect(ir.gates[0].out).toBe(0);
+  });
+
+  it("таблица истинности повёрнутого гейта через симулятор", () => {
+    const g = makeGrid(20, 20);
+    gate(g, 5, 5, AND, 1);
+    wire(g, 5, 4);
+    wire(g, 7, 4);
+    wire(g, 6, 8);
+    const { ir, errors } = parse(g);
+    expect(errors).toHaveLength(0);
+    const [a, b] = ir.gates[0].ins;
+    const out = ir.gates[0].out;
+    const s = createSim(ir);
+    const drive = (x: number, y: number) => {
+      s.cur[a] = x;
+      s.cur[b] = y;
+      step(s);
+    };
+    drive(0, 0);
+    expect(s.cur[out]).toBe(0);
+    drive(1, 0);
+    expect(s.cur[out]).toBe(0);
+    drive(0, 1);
+    expect(s.cur[out]).toBe(0);
+    drive(1, 1);
+    expect(s.cur[out]).toBe(1);
+  });
+
+  it("ERR_BODY_NOT_RECT для фигуры, близкой к каноничной, но не совпадающей", () => {
+    const g = makeGrid(20, 20);
+    gate(g, 5, 5, AND);
+    wire(g, 4, 5);
+    wire(g, 4, 7);
+    wire(g, 8, 6);
+    setPixelU(g, 7, 5, AND); // лишний пиксель в фигуре
+    const { errors } = parse(g);
+    expect(errors.some((e) => e.code === "ERR_BODY_NOT_RECT")).toBe(true);
+  });
+
+  it("ERR_PINS_MISMATCH для провода сбоку, где у фигуры нет отростка", () => {
+    const g = makeGrid(20, 20);
+    gate(g, 5, 5, AND);
+    wire(g, 4, 5);
+    wire(g, 4, 7);
+    wire(g, 8, 6);
+    wire(g, 6, 4); // северная сторона фигуры отростков не имеет
+    const { errors } = parse(g);
+    expect(errors.some((e) => e.code === "ERR_PINS_MISMATCH")).toBe(true);
+  });
+
+  it("сплошные прямоугольники остаются валидными (старые схемы)", () => {
+    const g = makeGrid(20, 20);
+    rect(g, 5, 5, AND, 4, 3);
+    wire(g, 4, 5);
+    wire(g, 4, 7);
+    wire(g, 9, 6);
+    const { ir, errors } = parse(g);
+    expect(errors).toHaveLength(0);
+    expect(ir.gates).toHaveLength(1);
+  });
+});
+
+describe("parse: 1-входный гейт (крест) — ориентация по разводке", () => {
+  // Крест в (2, y0): отростки N (3,y0), W (2,y0+1), E (4,y0+1), S (3,y0+2).
+  it("входом становится приведённая сеть, выход — противоположный отросток", () => {
+    const g = makeGrid(20, 12);
+    gate(g, 2, 5, NOT);
+    rect(g, 7, 2, HIGH, 2, 2); // HIGH 7..8 / 2..3
+    // приводим восточный отросток (4,6) с запада
+    hWire(g, 9, 10, 3);
+    for (let y = 3; y <= 6; y++) wire(g, 10, y);
+    hWire(g, 5, 10, 6);
+    // западный отросток (2,6) — свободная сеть
+    wire(g, 1, 6);
+    const { ir, errors, warnings } = parse(g);
+    expect(errors).toHaveLength(0);
+    expect(warnings).toHaveLength(0);
+    expect(ir.gates).toHaveLength(1);
+    expect(ir.gates[0].type).toBe("not");
+    // по сторонам света входом был бы запад (сеть 1), но её никто не приводит
+    expect(ir.gates[0].ins).toEqual([0]);
+    expect(ir.gates[0].out).toBe(1);
+    const s = createSim(ir);
+    // задержка 1 тик: источник и гейт читают значения предыдущего тика
+    ir.consts[0].value = 1;
+    step(s);
+    step(s);
+    expect(s.cur[ir.gates[0].out]).toBe(0);
+    ir.consts[0].value = 0;
+    step(s);
+    step(s);
+    expect(s.cur[ir.gates[0].out]).toBe(1);
+  });
+
+  it("при обоих приведённых отростках (кольцо из двух NOT) берутся роли по сторонам", () => {
+    const g = makeGrid(20, 12);
+    gate(g, 2, 2, NOT); // E (4,3), W (2,3)
+    gate(g, 8, 2, NOT); // W (8,3), E (10,3)
+    hWire(g, 5, 7, 3); // NOT1.E -> NOT2.W
+    for (let y = 3; y <= 6; y++) wire(g, 11, y); // NOT2.E -> вниз
+    hWire(g, 1, 11, 6); // -> налево
+    for (let y = 3; y <= 6; y++) wire(g, 1, y); // -> вверх к NOT1.W
+    const { ir, errors } = parse(g);
+    expect(errors).toHaveLength(0);
+    expect(ir.gates).toHaveLength(2);
+    const s = createSim(ir);
+    const trace: number[] = [];
+    for (let t = 0; t < 6; t++) {
+      step(s);
+      trace.push(s.cur[ir.gates[0].out]);
+    }
+    for (let i = 1; i < trace.length; i++) {
+      expect(trace[i]).toBe(trace[i - 1] === 1 ? 0 : 1);
+    }
+  });
+
+  it("маркер выхода по-прежнему важнее разводки (explicit-режим)", () => {
+    const g = makeGrid(20, 12);
+    gate(g, 2, 2, NOT);
+    wire(g, 5, 3); // восточный отросток (4,3) — единственный прямой пин
+    setPixelU(g, 3, 5, PIN_OUT); // маркер под южным отростком (3,4)
+    wire(g, 3, 6);
+    const { ir, errors } = parse(g);
+    expect(errors).toHaveLength(0);
+    expect(ir.gates[0].ins).toEqual([0]);
+    expect(ir.gates[0].out).toBe(1);
+  });
+
+  it("ERR_PINS_MISMATCH, если вход и выход NOT оказались на одной сети", () => {
+    const g = makeGrid(20, 12);
+    gate(g, 2, 5, NOT);
+    // один провод обходит крест сверху и касается и запада, и востока
+    wire(g, 1, 6);
+    for (let y = 2; y <= 6; y++) wire(g, 0, y);
+    hWire(g, 0, 5, 2);
+    for (let y = 2; y <= 6; y++) wire(g, 5, y);
+    const { errors } = parse(g);
+    expect(errors.some((e) => e.code === "ERR_PINS_MISMATCH")).toBe(true);
   });
 });
 

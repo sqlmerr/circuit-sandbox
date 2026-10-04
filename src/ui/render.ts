@@ -98,6 +98,10 @@ export function render(viewport: Viewport, s: State, _canvas: HTMLCanvasElement,
     ctx.globalAlpha = 1.0;
   }
 
+  if (s.tool === "brush" && mode === "edit") {
+    drawBrushGhost(ctx, cam, s);
+  }
+
   // Подсветка — только слабый тинт без обводки, чтобы не перекрашивать
   // саму клетку: иначе свежий провод под WARN_IDLE_NET выглядит
   // оранжевым вместо красного.
@@ -107,10 +111,6 @@ export function render(viewport: Viewport, s: State, _canvas: HTMLCanvasElement,
   for (const w of warnings) {
     overlayCells(ctx, cam, w.cells, "rgba(255,200,0,0.12)");
   }
-
-  ctx.strokeStyle = "#ff4444";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(0, 0, cw, ch);
 }
 
 function overlayCells(
@@ -155,4 +155,26 @@ function drawStampGhost(ctx: CanvasRenderingContext2D, cam: Camera, s: State) {
       ctx.fillRect(gx * cam.scale + cam.ox, gy * cam.scale + cam.oy, cam.scale, cam.scale);
     }
   }
+}
+
+const BRUSH_GHOST_ALPHA = 0.5;
+
+// Призрак кисти: один прозрачный квадрат активного цвета под курсором (ПКМ —
+// «стереть», цвет пустоты). Если клетка уже того же цвета, рисунок ничего не
+// изменит — тогда заливки нет, только рамка, чтобы курсор не «исчезал».
+function drawBrushGhost(ctx: CanvasRenderingContext2D, cam: Camera, s: State) {
+  const { ghostX: gx, ghostY: gy } = s;
+  if (gx < 0 || gy < 0 || gx >= s.grid.width || gy >= s.grid.height) return;
+  const idx = s.ghostErase ? EMPTY_STAMP : s.brushColor;
+  const sx = gx * cam.scale + cam.ox;
+  const sy = gy * cam.scale + cam.oy;
+  if (s.grid.data[gy * s.grid.width + gx] !== idx) {
+    ctx.globalAlpha = BRUSH_GHOST_ALPHA;
+    ctx.fillStyle = stampColor(idx);
+    ctx.fillRect(sx, sy, cam.scale, cam.scale);
+    ctx.globalAlpha = 1.0;
+  }
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(sx + 0.5, sy + 0.5, cam.scale - 1, cam.scale - 1);
 }

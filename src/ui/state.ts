@@ -1,4 +1,6 @@
 import { createGrid2D } from "../core/types";
+import { roleOf } from "../core/palette";
+import { shapeForRole } from "../core/shapes";
 import type { Grid2D, IR, ParseError } from "../core/types";
 
 export type Mode = "edit" | "run";
@@ -47,6 +49,7 @@ export interface State {
   stamp: StampState | null;
   ghostX: number;
   ghostY: number;
+  ghostErase: boolean;
 }
 
 export type Action =
@@ -66,7 +69,8 @@ export type Action =
   | { kind: "parse"; ir: IR; errors: ParseError[]; warnings: ParseError[]; netMap: Int32Array }
   | { kind: "mode"; mode: Mode }
   | { kind: "load"; grid: Grid2D; w: number; h: number }
-  | { kind: "ghostPos"; x: number; y: number };
+  | { kind: "ghostPos"; x: number; y: number }
+  | { kind: "ghostErase"; on: boolean };
 
 export function initState(defaultW = 128, defaultH = 128): State {
   const grid = createGrid2D(defaultW, defaultH);
@@ -85,6 +89,7 @@ export function initState(defaultW = 128, defaultH = 128): State {
     stamp: makeStamp("and"),
     ghostX: 0,
     ghostY: 0,
+    ghostErase: false,
   };
 }
 
@@ -174,6 +179,9 @@ export function apply(s: State, a: Action): State {
     case "ghostPos":
       return { ...s, ghostX: a.x, ghostY: a.y };
 
+    case "ghostErase":
+      return s.ghostErase === a.on ? s : { ...s, ghostErase: a.on };
+
     default:
       return s;
   }
@@ -186,10 +194,10 @@ export interface StampDef {
 }
 
 export const STAMP_DEFS: StampDef[] = [
-  { type: "and",  label: "AND",  pixels: [[0,0,0,0],[3,3,0,0],[3,3,3,0]] },
-  { type: "or",   label: "OR",   pixels: [[0,0,0,0],[4,4,0,0],[4,4,4,0]] },
-  { type: "xor",  label: "XOR",  pixels: [[0,0,0,0],[5,5,0,0],[5,5,5,0]] },
-  { type: "not",  label: "NOT",  pixels: [[0,0,0],[6,6,0],[6,6,0]] },
+  { type: "and",  label: "AND",  pixels: gatePixels(3) },
+  { type: "or",   label: "OR",   pixels: gatePixels(4) },
+  { type: "xor",  label: "XOR",  pixels: gatePixels(5) },
+  { type: "not",  label: "NOT",  pixels: gatePixels(6) },
   { type: "high", label: "HIGH", pixels: [[8,8,8],[8,8,8],[8,8,8]] },
   { type: "low",  label: "LOW",  pixels: [[9,9,9],[9,9,9],[9,9,9]] },
   { type: "bulb", label: "BULB", pixels: [[10,10,10],[10,10,10]] },
@@ -199,20 +207,33 @@ export const STAMP_DEFS: StampDef[] = [
   { type: "bridge", label: "BRIDGE", pixels: [[0, 2, 0], [2, ERASE_STAMP, 2], [0, 2, 0]] },
 ];
 
+// Матрица штампа из каноничной фигуры тела роли (core/shapes) — тот же
+// источник правды, что и у парсера, поэтому штамп всегда совпадает с фигурой,
+// которую парсер готов принять.
+function gatePixels(idx: number): number[][] {
+  const shape = shapeForRole(roleOf(idx))!;
+  return shape.map((row) => row.map((v) => (v ? idx : 0)));
+}
+
 export function makeStamp(type: StampType): StampState {
   const def = STAMP_DEFS.find(d => d.type === type)!;
   return { type, rotation: false, w: def.pixels[0].length, h: def.pixels.length, pixels: def.pixels };
 }
 
-function rotateStamp(s: StampState): StampState {
+/**
+ * Поворот штампа на 90° по часовой стрелке: клетка (y, x) переезжает в
+ * (x, h-1-y). Вместе с картинкой поворачиваются и отростки-пины, поэтому
+ * разводка (входы на W/N, выход на E/S) остаётся такой же.
+ */
+export function rotateStamp(s: StampState): StampState {
   const { pixels, w, h } = s;
   const newW = h;
   const newH = w;
   const newPx: number[][] = [];
   for (let y = 0; y < newH; y++) {
     const row: number[] = [];
-    for (let x = 0; x < newW; x++) row.push(pixels[newH - 1 - y][x]);
+    for (let x = 0; x < newW; x++) row.push(pixels[h - 1 - x][y]);
     newPx.push(row);
   }
-  return { ...s, w: newW, h: newH, pixels: newPx, rotation: true };
+  return { ...s, w: newW, h: newH, pixels: newPx, rotation: !s.rotation };
 }

@@ -1,4 +1,4 @@
-import { makeGrid, rect, wire, hWire, vWire } from "./util";
+import { makeGrid, gate, rect, hWire, vWire } from "./util";
 import type { Grid2D } from "../core/types";
 
 const XOR = 5;
@@ -19,8 +19,10 @@ export function halfAdder(): Grid2D {
 
   rect(g, 1, 2, HIGH, 3, 3); // HIGH_A x1-3 y2-4, E=4
   rect(g, 1, 8, HIGH, 3, 3); // HIGH_B x1-3 y8-10, E=4
-  rect(g, 12, 2, XOR, 4, 3); // XOR x12-15 y2-4
-  rect(g, 12, 8, AND, 4, 3); // AND x12-15 y8-10
+  // 2-входные гейты: отростки на западе (12,2) и (12,4) / (12,8) и (12,10) —
+  // входы, отросток на востоке (14,3) / (14,9) — выход.
+  gate(g, 12, 2, XOR); // XOR x12-14 y2-4
+  gate(g, 12, 8, AND); // AND x12-14 y8-10
   rect(g, 17, 2, BULB, 3, 3); // сумма x17-19 y2-4, W=16
   rect(g, 17, 8, BULB, 3, 3); // перенос x17-19 y8-10, W=16
 
@@ -35,10 +37,10 @@ export function halfAdder(): Grid2D {
   vWire(g, 10, 4, 10); // НЕ продлевать ниже y10 — там шина B сама по себе (самопересечение!)
   hWire(g, 10, 11, 4);
 
-  // сумма: XOR.E(16,3) -> лампочка
-  wire(g, 16, 3);
-  // перенос: AND.E(16,9) -> лампочка
-  wire(g, 16, 9);
+  // сумма: XOR.E(14,3) -> лампочка
+  hWire(g, 15, 16, 3);
+  // перенос: AND.E(14,9) -> лампочка
+  hWire(g, 15, 16, 9);
 
   return g;
 }
