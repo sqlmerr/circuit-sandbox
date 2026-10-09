@@ -103,7 +103,7 @@ export function render(viewport: Viewport, s: State, _canvas: HTMLCanvasElement,
   }
 
   // Подсветка — только слабый тинт без обводки, чтобы не перекрашивать
-  // саму клетку: иначе свежий провод под WARN_IDLE_NET выглядит
+  // саму клетку: иначе свежий провод под предупреждением выглядит
   // оранжевым вместо красного.
   for (const e of errors) {
     overlayCells(ctx, cam, e.cells, "rgba(255,0,0,0.15)");

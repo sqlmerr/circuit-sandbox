@@ -7,7 +7,7 @@ export const SIZE_MIN = 16;
 export const SIZE_MAX = 512;
 export const SIZE_DEFAULT = 128;
 
-// v3: DFF удалён из палитры (бывший индекс 10 → unknown, бывший 11 → 10).
+// v3: DFF удалён из палитры, LOW заменён лампочкой (бывший 10 → unknown, 11 → bulb(9)).
 const LS_KEY = "pixel-logic-grid-v3";
 const LS_KEY_V2 = "pixel-logic-grid-v2";
 
@@ -21,7 +21,7 @@ export function saveToLocal(grid: Grid2D): void {
 }
 
 export function loadFromLocal(): Grid2D | null {
-  // старый v2-массив мигрируем в v3 (индексы 10→1, 11→10) и пересохраняем
+  // старый v2-массив мигрируем (индексы 10→1, 11→9) и пересохраняем
   const g = readLocal(LS_KEY) ?? migrateLocalV2();
   if (g) saveToLocal(g);
   return g;
@@ -98,7 +98,7 @@ export async function openFile(file: File): Promise<Grid2D> {
     }
     if (!parsed.pixels) throw new Error("Некорректный JSON");
     let bytes = decodeBase64(parsed.pixels);
-    if (parsed.version === 2) bytes = migrateV2(bytes); // 10→unknown, 11→bulb(10)
+    if (parsed.version === 2) bytes = migrateV2(bytes); // 10→unknown, 11→bulb(9)
     const w = clamp(parsed.width ?? SIZE_DEFAULT, SIZE_MIN, SIZE_MAX);
     const h = clamp(parsed.height ?? SIZE_DEFAULT, SIZE_MIN, SIZE_MAX);
     const g = createGrid2D(w, h);

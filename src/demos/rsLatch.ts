@@ -4,7 +4,7 @@ import type { Grid2D } from "../core/types";
 const OR = 4;
 const NOT = 6;
 const HIGH = 8;
-const BULB = 10;
+const BULB = 9;
 
 // RS-триггер из OR + NOT: Q = S OR (Q AND NOT R).
 // S и R — HIGH-источники (runtime-тумблеры в run-режиме).

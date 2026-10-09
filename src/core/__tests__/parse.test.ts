@@ -9,9 +9,8 @@ const XOR = 5;
 const NOT = 6;
 const CLOCK = 7;
 const HIGH = 8;
-const LOW = 9;
-const BULB = 10;
-const PIN_OUT = 11;
+const BULB = 9;
+const PIN_OUT = 10;
 
 describe("parse: components", () => {
   it("recognizes an AND gate with two west inputs and one east output", () => {
@@ -68,19 +67,15 @@ describe("parse: components", () => {
     expect(ir.clocks[0].net).toBe(0);
   });
 
-  it("recognizes HIGH and LOW consts", () => {
+  it("recognizes a HIGH const", () => {
     const g = makeGrid(30, 20);
     rect(g, 2, 2, HIGH, 3, 3);
     wire(g, 5, 3); // east mid output
-    rect(g, 12, 2, LOW, 3, 3);
-    wire(g, 15, 3);
     const { ir, errors } = parse(g);
     expect(errors).toHaveLength(0);
-    expect(ir.consts).toHaveLength(2);
-    const high = ir.consts.find((c) => c.value === 1)!;
-    const low = ir.consts.find((c) => c.value === 0)!;
-    expect(high.net).toBe(0);
-    expect(low.net).toBe(1);
+    expect(ir.consts).toHaveLength(1);
+    expect(ir.consts[0].value).toBe(1);
+    expect(ir.consts[0].net).toBe(0);
   });
 
   it("recognizes a bulb (1 input any side)", () => {
@@ -230,7 +225,7 @@ describe("parse: errors", () => {
 });
 
 describe("parse: warnings", () => {
-  it("reports WARN_NO_DRIVER for an input net without a driver", () => {
+  it("does not warn for an input net without a driver", () => {
     const g = makeGrid(20, 20);
     rect(g, 5, 5, AND, 4, 3);
     wire(g, 4, 5);
@@ -238,14 +233,14 @@ describe("parse: warnings", () => {
     wire(g, 9, 6);
     const { warnings, errors } = parse(g);
     expect(errors).toHaveLength(0);
-    expect(warnings.some((w) => w.code === "WARN_NO_DRIVER")).toBe(true);
+    expect(warnings).toHaveLength(0);
   });
 
-  it("reports WARN_IDLE_NET for a bare wire", () => {
+  it("does not warn for a bare wire", () => {
     const g = makeGrid(10, 10);
     wire(g, 2, 2);
     const { warnings } = parse(g);
-    expect(warnings.some((w) => w.code === "WARN_IDLE_NET")).toBe(true);
+    expect(warnings).toHaveLength(0);
   });
 });
 
@@ -259,8 +254,8 @@ describe("parse: pin-out marker (rotated structures)", () => {
     wire(g, 5, 8); // вход снизу
     const { ir, errors, warnings } = parse(g);
     expect(errors).toHaveLength(0);
-    // входы без драйверов — ожидаемые предупреждения, не ошибки
-    expect(warnings.every((w) => w.code === "WARN_NO_DRIVER")).toBe(true);
+    // входы без драйверов — не ошибки и не предупреждения
+    expect(warnings).toHaveLength(0);
     expect(ir.gates).toHaveLength(1);
     expect(ir.gates[0].type).toBe("and");
     expect(ir.gates[0].out).toBe(1); // сеть провода (10,6) = маркер
@@ -413,7 +408,7 @@ describe("parse: фигура гейта 2 входа / 1 выход", () => {
     wire(g, 8, 6); // выход
     const { ir, errors, warnings } = parse(g);
     expect(errors).toHaveLength(0);
-    expect(warnings.every((w) => w.code === "WARN_NO_DRIVER")).toBe(true);
+    expect(warnings).toHaveLength(0);
     expect(ir.gates).toHaveLength(1);
     expect(ir.gates[0].ins).toEqual([0, 2]);
     expect(ir.gates[0].out).toBe(1);

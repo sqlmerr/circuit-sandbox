@@ -9,9 +9,8 @@ describe("palette", () => {
     expect(quantize(255, 255, 0)).toBe(6); // not
     expect(quantize(255, 0, 255)).toBe(7); // clock
     expect(quantize(0, 255, 255)).toBe(8); // high
-    expect(quantize(255, 0x88, 0)).toBe(9); // low
-    expect(quantize(0x80, 255, 0)).toBe(10); // bulb
-    expect(quantize(0xff, 0x69, 0xb4)).toBe(11); // pin-out
+    expect(quantize(255, 0x88, 0)).toBe(9); // bulb
+    expect(quantize(0xff, 0x69, 0xb4)).toBe(10); // pin-out
     expect(quantize(0x80, 0x80, 0x80)).toBe(2); // wire
   });
 
@@ -48,23 +47,23 @@ describe("palette", () => {
     expect(roleOf(1)).toBe("unknown");
     expect(roleOf(2)).toBe("wire");
     expect(roleOf(3)).toBe("and");
-    expect(roleOf(10)).toBe("bulb");
-    expect(roleOf(11)).toBe("pin-out");
+    expect(roleOf(9)).toBe("bulb");
+    expect(roleOf(10)).toBe("pin-out");
     expect(roleOf(99)).toBe("unknown");
   });
 });
 
-describe("palette: v2→v3 migration", () => {
-  it("maps old DFF (10) to unknown and old bulb (11) to 10", () => {
+describe("palette: v2→текущая migration", () => {
+  it("maps old DFF (10) to unknown and old bulb (11) to 9", () => {
     expect(migrateV2Index(0)).toBe(0);
     expect(migrateV2Index(2)).toBe(2);
     expect(migrateV2Index(9)).toBe(9);
     expect(migrateV2Index(10)).toBe(1); // бывший DFF
-    expect(migrateV2Index(11)).toBe(10); // бывшая лампочка
+    expect(migrateV2Index(11)).toBe(9); // бывшая лампочка
   });
 
   it("migrates a full buffer", () => {
     const data = new Uint8Array([0, 2, 3, 10, 11, 9]);
-    expect(Array.from(migrateV2(data))).toEqual([0, 2, 3, 1, 10, 9]);
+    expect(Array.from(migrateV2(data))).toEqual([0, 2, 3, 1, 9, 9]);
   });
 });

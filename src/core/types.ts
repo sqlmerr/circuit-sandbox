@@ -24,8 +24,6 @@ export type ErrorCode =
   | "ERR_PINS_MISMATCH"
   | "ERR_SOURCE_TWO_NETS"
   | "ERR_PORT"
-  | "WARN_NO_DRIVER"
-  | "WARN_IDLE_NET"
   | "WARN_PORT_INCOMPLETE";
 
 export interface ParseError {

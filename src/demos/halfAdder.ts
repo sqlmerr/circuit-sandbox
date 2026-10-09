@@ -4,7 +4,7 @@ import type { Grid2D } from "../core/types";
 const XOR = 5;
 const AND = 3;
 const HIGH = 8;
-const BULB = 10;
+const BULB = 9;
 
 // Полусумматор: XOR (сумма) + AND (перенос).
 // Входы A и B — HIGH-источники (переключаются кликом в run-режиме).

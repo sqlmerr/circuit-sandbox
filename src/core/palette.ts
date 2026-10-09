@@ -10,13 +10,12 @@ export type Role =
   | "not"
   | "clock"
   | "high"
-  | "low"
   | "bulb"
   | "pin-out";
 
 export const WIRE_INDEX = 2;
 export const FIRST_DRAWABLE = WIRE_INDEX;
-export const LAST_DRAWABLE = 11;
+export const LAST_DRAWABLE = 10;
 
 export interface PaletteEntry {
   idx: number;
@@ -36,9 +35,8 @@ const ENTRIES: PaletteEntry[] = [
   { idx: 6, hex: "#FFFF00", role: "not", value: "тело NOT-гейта", rgb: [0xff, 0xff, 0x00] },
   { idx: 7, hex: "#FF00FF", role: "clock", value: "тело тактового генератора", rgb: [0xff, 0x00, 0xff] },
   { idx: 8, hex: "#00FFFF", role: "high", value: "константная единица", rgb: [0x00, 0xff, 0xff] },
-  { idx: 9, hex: "#FF8800", role: "low", value: "константный ноль", rgb: [0xff, 0x88, 0x00] },
-  { idx: 10, hex: "#80FF00", role: "bulb", value: "лампочка", rgb: [0x80, 0xff, 0x00] },
-  { idx: 11, hex: "#FF69B4", role: "pin-out", value: "маркер выхода (повёрнутые схемы)", rgb: [0xff, 0x69, 0xb4] },
+  { idx: 9, hex: "#FF8800", role: "bulb", value: "лампочка", rgb: [0xff, 0x88, 0x00] },
+  { idx: 10, hex: "#FF69B4", role: "pin-out", value: "маркер выхода (повёрнутые схемы)", rgb: [0xff, 0x69, 0xb4] },
 ];
 
 const UNKNOWN_ENTRY: PaletteEntry = ENTRIES[1];
@@ -83,12 +81,12 @@ export function quantize(r: number, g: number, b: number): number {
   return bestDist > QUANT_THRESHOLD ? UNKNOWN_ENTRY.idx : best.idx;
 }
 
-// Миграция палитры v2 → v3 (удалён DFF):
+// Миграция палитры v2 → текущая (удалён DFF, LOW заменён лампочкой):
 //  - старый индекс 10 (DFF) становится unknown (1) и подсвечивается ошибкой;
-//  - старый индекс 11 (bulb) переносится на 10.
+//  - старый индекс 11 (bulb) переносится на 9 (текущий индекс лампочки).
 export function migrateV2Index(idx: number): number {
   if (idx === 10) return 1;
-  if (idx === 11) return 10;
+  if (idx === 11) return 9;
   return idx;
 }
 

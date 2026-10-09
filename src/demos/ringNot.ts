@@ -2,7 +2,7 @@ import { makeGrid, gate, rect, hWire, vWire } from "./util";
 import type { Grid2D } from "../core/types";
 
 const NOT = 6;
-const BULB = 10;
+const BULB = 9;
 
 // Два NOT в кольце + лампочка. Осциллирует с периодом 2 тика.
 //

@@ -7,7 +7,7 @@ export type Mode = "edit" | "run";
 export type ToolName = "stamp" | "brush" | "pipette";
 export type StampType =
   | "and" | "or" | "xor" | "not"
-  | "high" | "low" | "bulb" | "clock"
+  | "high" | "bulb" | "clock"
   | "bridge";
 
 // Значение пикселя штампа: 0 = не трогать клетку, ERASE_STAMP = стереть в пусто,
@@ -199,8 +199,7 @@ export const STAMP_DEFS: StampDef[] = [
   { type: "xor",  label: "XOR",  pixels: gatePixels(5) },
   { type: "not",  label: "NOT",  pixels: gatePixels(6) },
   { type: "high", label: "HIGH", pixels: [[8,8,8],[8,8,8],[8,8,8]] },
-  { type: "low",  label: "LOW",  pixels: [[9,9,9],[9,9,9],[9,9,9]] },
-  { type: "bulb", label: "BULB", pixels: [[10,10,10],[10,10,10]] },
+  { type: "bulb", label: "BULB", pixels: [[9,9],[9,9]] },
   { type: "clock",label: "CLK",  pixels: [[7,7,7],[7,7,7],[7,7,7]] },
   // Мост: 4 рукава-провода вокруг пустого центра — перекрёсток «плюс без
   // центровины» (парсер пускает H и V насквозь, не соединяя их между собой).

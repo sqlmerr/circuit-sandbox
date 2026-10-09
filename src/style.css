@@ -58,7 +58,7 @@ html, body {
   right: var(--dock-margin);
   top: var(--dock-margin);
   flex-direction: column;
-  max-width: 280px;
+  max-width: 360px;
   max-height: calc(100vh - var(--bottom-reserve));
   overflow-y: auto;
   overflow-x: hidden;

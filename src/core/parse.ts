@@ -1,4 +1,4 @@
-import { roleOf, WIRE_INDEX } from "./palette";
+import { roleOf } from "./palette";
 import type { Role } from "./palette";
 import { matchesShape, shapeForRole, shapePorts } from "./shapes";
 import type { ShapePorts, Side as ShapeSide } from "./shapes";
@@ -11,7 +11,6 @@ const COMPONENT_ROLES = new Set<Role>([
   "not",
   "clock",
   "high",
-  "low",
   "bulb",
 ]);
 
@@ -422,12 +421,6 @@ export function parse(grid: Grid2D): ParseResult {
   }
 
   const { netMap, netMapV, netCount } = buildNets(grid);
-  const wireCells: [number, number][] = [];
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (data[y * width + x] === WIRE_INDEX) wireCells.push([x, y]);
-    }
-  }
 
   const bodies = detectBodies(grid);
 
@@ -516,15 +509,7 @@ export function parse(grid: Grid2D): ParseResult {
     consts: [],
     bulbs: [],
   };
-  const wireCellsByNet = new Map<number, [number, number][]>();
-  for (const [x, y] of wireCells) {
-    const net = netMap[y * width + x];
-    if (net < 0) continue;
-    if (!wireCellsByNet.has(net)) wireCellsByNet.set(net, []);
-    wireCellsByNet.get(net)!.push([x, y]);
-  }
 
-  const pinnedNets = new Set<number>();
   // Кто приводит сеть: сеть → индексы тел. Нужен гейтам с 1 входом (у них
   // вход/выход определяется разводкой) и наполняется по мере разбора тел.
   const drivenBy = new Map<number, Set<number>>();
@@ -569,8 +554,7 @@ export function parse(grid: Grid2D): ParseResult {
         return null;
       }
       case "clock":
-      case "high":
-      case "low": {
+      case "high": {
         const distinctNets = new Set(e.pins.map((p) => p.net));
         if (distinctNets.size > 1) {
           errors.push({
@@ -592,7 +576,7 @@ export function parse(grid: Grid2D): ParseResult {
         if (e.role === "clock") {
           ir.clocks.push({ net, cells: e.body });
         } else {
-          ir.consts.push({ net, value: e.role === "high" ? 1 : 0, cells: e.body });
+          ir.consts.push({ net, value: 1, cells: e.body });
         }
         return net;
       }
@@ -645,10 +629,8 @@ export function parse(grid: Grid2D): ParseResult {
     }
 
     const pins = collectPins(grid, body, netMap, netMapV);
-    for (const p of pins) pinnedNets.add(p.net);
 
     const marker = markersByBody.get(bodyIdx);
-    if (marker) pinnedNets.add(marker.net);
 
     // Маркер на лампочке запрещён.
     if (role === "bulb" && marker) {
@@ -713,33 +695,6 @@ export function parse(grid: Grid2D): ParseResult {
     if (drivenNet !== null) markDriven(drivenNet, entry.bodyIdx);
   }
 
-  const driverMap = collectDrivers(ir);
-  const drivenSet = new Set(driverMap.keys());
-
-  const usedNets = new Set<number>();
-  for (const g of ir.gates) for (const n of g.ins) usedNets.add(n);
-  for (const b of ir.bulbs) usedNets.add(b.net);
-
-  for (const net of usedNets) {
-    if (!drivenSet.has(net)) {
-      warnings.push({
-        code: "WARN_NO_DRIVER",
-        message: "Сеть используется, но не имеет драйвера — работает как 0",
-        cells: wireCellsByNet.get(net) ?? [],
-      });
-    }
-  }
-
-  for (const [net, cells] of wireCellsByNet) {
-    if (cells.length > 0 && !pinnedNets.has(net)) {
-      warnings.push({
-        code: "WARN_IDLE_NET",
-        message: "Сеть не подключена ни к чему",
-        cells,
-      });
-    }
-  }
-
   return { ir, errors, warnings, netMap };
 }
 
@@ -749,15 +704,3 @@ function maxDim(body: [number, number][], which: "w" | "h"): number {
   return which === "w" ? Math.max(...xs) - Math.min(...xs) + 1 : Math.max(...ys) - Math.min(...ys) + 1;
 }
 
-function collectDrivers(ir: IR): Map<number, [number, number][][]> {
-  const drivers = new Map<number, [number, number][][]>();
-  function add(net: number, body: [number, number][]) {
-    const arr = drivers.get(net);
-    if (arr) arr.push(body);
-    else drivers.set(net, [body]);
-  }
-  for (const g of ir.gates) add(g.out, g.cells);
-  for (const c of ir.consts) add(c.net, c.cells);
-  for (const c of ir.clocks) add(c.net, c.cells);
-  return drivers;
-}
