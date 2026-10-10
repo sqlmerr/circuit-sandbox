@@ -13,7 +13,10 @@ const LS_KEY_V2 = "pixel-logic-grid-v2";
 
 export function saveToLocal(grid: Grid2D): void {
   try {
-    localStorage.setItem(LS_KEY, encodeBase64(grid.data));
+    // Храним размеры вместе с пикселями: демо и импортированные PNG бывают
+    // меньше дефолтных 128×128, и без размеров схема не переживёт F5.
+    const payload = JSON.stringify({ w: grid.width, h: grid.height, p: encodeBase64(grid.data) });
+    localStorage.setItem(LS_KEY, payload);
     localStorage.removeItem(LS_KEY_V2);
   } catch {
     /* ignore */
@@ -31,6 +34,17 @@ function readLocal(key: string): Grid2D | null {
   const raw = localStorage.getItem(key);
   if (!raw) return null;
   try {
+    // новый формат: JSON { w, h, p }; старый — голый base64 (всегда 128×128)
+    if (raw.startsWith("{")) {
+      const parsed = JSON.parse(raw) as { w?: number; h?: number; p?: string };
+      if (!parsed.p) return null;
+      const bytes = decodeBase64(parsed.p);
+      const w = clamp(parsed.w ?? SIZE_DEFAULT, SIZE_MIN, SIZE_MAX);
+      const h = clamp(parsed.h ?? SIZE_DEFAULT, SIZE_MIN, SIZE_MAX);
+      const g = createGrid2D(w, h);
+      g.data.set(bytes.subarray(0, w * h));
+      return g;
+    }
     const bytes = decodeBase64(raw);
     const g = createGrid2D(SIZE_DEFAULT, SIZE_DEFAULT);
     const n = Math.min(bytes.length, g.width * g.height);

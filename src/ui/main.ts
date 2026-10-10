@@ -47,7 +47,17 @@ function viewport(): Viewport {
 }
 
 function emptyIr() {
-  return { width: 0, height: 0, netCount: 0, gates: [], clocks: [], consts: [], bulbs: [] };
+  return {
+    width: 0,
+    height: 0,
+    netCount: 0,
+    gates: [],
+    clocks: [],
+    consts: [],
+    switches: [],
+    memories: [],
+    bulbs: [],
+  };
 }
 
 // ---- dispatch ----
@@ -92,13 +102,13 @@ function doParse(): void {
 function rebuildSim(): void {
   simCtx.sim = createSim(state.ir ?? emptyIr());
   simCtx.dirty = false;
-  state = apply(state, { kind: "simTick", cur: simCtx.sim.cur, t: simCtx.sim.t });
+  state = apply(state, { kind: "simTick", cur: simCtx.sim.cur, t: simCtx.sim.t, switches: simCtx.sim.switches });
 }
 
 function stepOnce(): void {
   if (simCtx.dirty || !state.ir) rebuildSim();
   simStep(simCtx.sim);
-  state = apply(state, { kind: "simTick", cur: simCtx.sim.cur, t: simCtx.sim.t });
+  state = apply(state, { kind: "simTick", cur: simCtx.sim.cur, t: simCtx.sim.t, switches: simCtx.sim.switches });
   render(viewport(), state, canvas, ctx);
 }
 
@@ -115,6 +125,21 @@ function resetSim(): void {
   state = apply(state, { kind: "simReset" });
   syncPanels();
   render(viewport(), state, canvas, ctx);
+}
+
+// ---- load a built-in demo into the editor ----
+// Полностью замещает полотно готовой схемой из src/demos: сбрасывает
+// симуляцию, пересобирает IR сразу (без debounce) и вписывает камеру.
+function loadDemo(build: () => Grid2D): void {
+  const grid = build();
+  undo.commit(grid);
+  state = apply(state, { kind: "mode", mode: "edit" });
+  state = apply(state, { kind: "grid", grid });
+  saveToLocal(grid);
+  syncPanels();
+  fitView();
+  doParse();
+  resetSim();
 }
 
 // ---- editing commit wrapper ----
@@ -140,6 +165,41 @@ function toScreen(e: MouseEvent | WheelEvent): [number, number] {
 
 function inEdit(): boolean {
   return state.mode === "edit";
+}
+
+// Клик в run-режиме по источнику с рантайм-значением: переключатель (SWITCH)
+// или HIGH-константа. Возвращает вид и индекс компонента в IR.
+type RunHit = { kind: "switch"; index: number } | { kind: "high"; index: number };
+
+function runHitAt(gx: number, gy: number): RunHit | null {
+  const ir = state.ir;
+  if (!ir) return null;
+  const inCells = (cells: [number, number][]) => cells.some(([cx, cy]) => cx === gx && cy === gy);
+  for (let i = 0; i < ir.switches.length; i++) {
+    if (inCells(ir.switches[i].cells)) return { kind: "switch", index: i };
+  }
+  for (let i = 0; i < ir.consts.length; i++) {
+    if (inCells(ir.consts[i].cells)) return { kind: "high", index: i };
+  }
+  return null;
+}
+
+function toggleRunInput(gx: number, gy: number): void {
+  const hit = runHitAt(gx, gy);
+  if (!hit) return;
+  // если после последнего парсинга сим ещё не пересобран — соберём, иначе
+  // клик попадёт в устаревший IR/массивы рантайм-состояния
+  if (simCtx.dirty) rebuildSim();
+  if (hit.kind === "switch") {
+    simCtx.sim.switches[hit.index] ^= 1;
+    state = apply(state, { kind: "simSwitches", switches: simCtx.sim.switches.slice() });
+  } else {
+    // HIGH — runtime-тумблер: меняем значение константы на время сессии,
+    // пиксели не трогаем (ре-парсинг вернёт value = 1).
+    const c = state.ir!.consts[hit.index];
+    c.value = c.value ? 0 : 1;
+  }
+  render(viewport(), state, canvas, ctx);
 }
 
 canvas.addEventListener("mousemove", (e) => {
@@ -192,7 +252,11 @@ canvas.addEventListener("mousedown", (e) => {
     return;
   }
 
-  if (!inEdit()) return;
+  if (!inEdit()) {
+    // run-режим: клик по SWITCH/HIGH переключает его значение (в т.ч. на паузе)
+    if (e.button === 0) toggleRunInput(gx, gy);
+    return;
+  }
 
   if (state.tool === "pipette") {
     const a = tools.pipette(state, gx, gy);
@@ -255,7 +319,7 @@ window.addEventListener("keydown", (e) => {
     case "i": dispatch({ kind: "tool", tool: "pipette" }); break;
     case "r": dispatch({ kind: "stampRot" }); break;
     case "escape": dispatch({ kind: "stampCancel" }); break;
-    case ".": if (inEdit() || state.sim.running) stepOnce(); break;
+    case ".": if (state.ir) stepOnce(); break;
     // export
     case "1": downloadPNG(state.grid, "circuit"); break;
     case "2": downloadJSON(state.grid); break;
@@ -390,6 +454,7 @@ clearBtn.addEventListener("click", () => {
 
 // ---- panels ----
 panels = buildPanels((a) => dispatch(a));
+panels.onLoadDemo = (build) => loadDemo(build);
 panels.onErrorClick = (cells) => {
   if (cells.length === 0) return;
   const [x, y] = cells[0];

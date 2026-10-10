@@ -242,6 +242,30 @@ html, body {
 .stamp-btn:hover { background: #3a3a3a; }
 .stamp-btn.active { border-color: #fff; box-shadow: 0 0 0 1px rgba(255,255,255,0.3); }
 
+#demo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.demo-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  text-align: left;
+  padding: 4px 8px;
+  background: #1f1f1f;
+  color: #d4d4d4;
+  border: 1px solid #4a4a4a;
+  border-radius: 3px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.demo-btn:hover { background: #3a3a3a; border-color: #888; }
+.demo-label { font-size: 12px; }
+.demo-hint { font-size: 10px; color: #888; }
+
 label {
   display: flex;
   align-items: center;

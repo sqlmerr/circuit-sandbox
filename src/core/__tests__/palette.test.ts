@@ -11,6 +11,8 @@ describe("palette", () => {
     expect(quantize(0, 255, 255)).toBe(8); // high
     expect(quantize(255, 0x88, 0)).toBe(9); // bulb
     expect(quantize(0xff, 0x69, 0xb4)).toBe(10); // pin-out
+    expect(quantize(0x00, 0xaa, 0x55)).toBe(11); // switch
+    expect(quantize(0xaa, 0x00, 0xaa)).toBe(12); // mem
     expect(quantize(0x80, 0x80, 0x80)).toBe(2); // wire
   });
 
@@ -49,6 +51,8 @@ describe("palette", () => {
     expect(roleOf(3)).toBe("and");
     expect(roleOf(9)).toBe("bulb");
     expect(roleOf(10)).toBe("pin-out");
+    expect(roleOf(11)).toBe("switch");
+    expect(roleOf(12)).toBe("mem");
     expect(roleOf(99)).toBe("unknown");
   });
 });

@@ -8,6 +8,7 @@ export type ToolName = "stamp" | "brush" | "pipette";
 export type StampType =
   | "and" | "or" | "xor" | "not"
   | "high" | "bulb" | "clock"
+  | "switch" | "mem"
   | "bridge";
 
 // Значение пикселя штампа: 0 = не трогать клетку, ERASE_STAMP = стереть в пусто,
@@ -25,6 +26,9 @@ export interface SimView {
   speed: number;
   cur: Uint8Array;
   t: number;
+  // Значения переключателей в рантайме (только для отображения; сама
+  // симуляция держит свою копию в SimState.switches).
+  switches: Uint8Array;
 }
 
 export interface StampState {
@@ -64,7 +68,8 @@ export type Action =
   | { kind: "stampCancel" }
   | { kind: "simRunning"; on: boolean }
   | { kind: "simSpeed"; speed: number }
-  | { kind: "simTick"; cur: Uint8Array; t: number }
+  | { kind: "simTick"; cur: Uint8Array; t: number; switches: Uint8Array }
+  | { kind: "simSwitches"; switches: Uint8Array }
   | { kind: "simReset" }
   | { kind: "parse"; ir: IR; errors: ParseError[]; warnings: ParseError[]; netMap: Int32Array }
   | { kind: "mode"; mode: Mode }
@@ -74,7 +79,13 @@ export type Action =
 
 export function initState(defaultW = 128, defaultH = 128): State {
   const grid = createGrid2D(defaultW, defaultH);
-  const initialSim: SimView = { running: false, speed: 10, cur: new Uint8Array(0), t: 0 };
+  const initialSim: SimView = {
+    running: false,
+    speed: 10,
+    cur: new Uint8Array(0),
+    t: 0,
+    switches: new Uint8Array(0),
+  };
   return {
     grid,
     cam: { scale: 4, ox: 0, oy: 0 },
@@ -141,22 +152,34 @@ export function apply(s: State, a: Action): State {
       return { ...s, stamp: null };
 
     case "simRunning":
+      // Пауза отвязана от edit: остановка симуляции оставляет режим run — так
+      // переключатели можно щёлкать, не возобновляя время. Возврат в edit —
+      // кнопка «Сначала» (simReset).
       return {
         ...s,
         sim: { ...s.sim, running: a.on },
-        mode: a.on ? "run" : "edit",
+        mode: a.on ? "run" : s.mode,
       };
 
     case "simSpeed":
       return { ...s, sim: { ...s.sim, speed: a.speed } };
 
     case "simTick":
-      return { ...s, sim: { running: s.sim.running, speed: s.sim.speed, cur: a.cur, t: a.t } };
+      return { ...s, sim: { running: s.sim.running, speed: s.sim.speed, cur: a.cur, t: a.t, switches: a.switches } };
+
+    case "simSwitches":
+      return { ...s, sim: { ...s.sim, switches: a.switches } };
 
     case "simReset":
       return {
         ...s,
-        sim: { running: false, speed: s.sim.speed, cur: new Uint8Array(s.ir?.netCount ?? 0), t: 0 },
+        sim: {
+          running: false,
+          speed: s.sim.speed,
+          cur: new Uint8Array(s.ir?.netCount ?? 0),
+          t: 0,
+          switches: new Uint8Array(s.ir?.switches.length ?? 0),
+        },
         mode: "edit",
       };
 
@@ -169,7 +192,7 @@ export function apply(s: State, a: Action): State {
         ...s,
         mode: a.mode,
         sim: a.mode === "edit"
-          ? { ...s.sim, running: false, cur: new Uint8Array(s.ir?.netCount ?? 0), t: 0 }
+          ? { ...s.sim, running: false, cur: new Uint8Array(s.ir?.netCount ?? 0), t: 0, switches: new Uint8Array(s.ir?.switches.length ?? 0) }
           : s.sim,
       };
 
@@ -199,6 +222,8 @@ export const STAMP_DEFS: StampDef[] = [
   { type: "xor",  label: "XOR",  pixels: gatePixels(5) },
   { type: "not",  label: "NOT",  pixels: gatePixels(6) },
   { type: "high", label: "HIGH", pixels: [[8,8,8],[8,8,8],[8,8,8]] },
+  { type: "switch", label: "SW", pixels: [[11,11],[11,11]] },
+  { type: "mem", label: "MEM", pixels: [[12,12],[12,12]] },
   { type: "bulb", label: "BULB", pixels: [[9,9],[9,9]] },
   { type: "clock",label: "CLK",  pixels: [[7,7,7],[7,7,7],[7,7,7]] },
   // Мост: 4 рукава-провода вокруг пустого центра — перекрёсток «плюс без

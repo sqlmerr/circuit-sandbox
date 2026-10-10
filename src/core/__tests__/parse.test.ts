@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parse } from "../parse";
 import { createSim, step } from "../sim";
-import { makeGrid, rect, wire, hWire, gate } from "./helpers";
+import { makeGrid, rect, wire, hWire, vWire, gate } from "./helpers";
 
 const AND = 3;
 const OR = 4;
@@ -11,6 +11,8 @@ const CLOCK = 7;
 const HIGH = 8;
 const BULB = 9;
 const PIN_OUT = 10;
+const SWITCH = 11;
+const MEM = 12;
 
 describe("parse: components", () => {
   it("recognizes an AND gate with two west inputs and one east output", () => {
@@ -159,7 +161,7 @@ describe("parse: errors", () => {
 
   it("reports ERR_UNKNOWN_PIXEL for an out-of-range index (indexes beyond the palette)", () => {
     const g = makeGrid(10, 10);
-    setPixelU(g, 1, 1, 12); // индекс вне палитры v3
+    setPixelU(g, 1, 1, 13); // индекс вне палитры v3
     setPixelU(g, 2, 2, 99);
     const { errors } = parse(g);
     const unk = errors.find((e) => e.code === "ERR_UNKNOWN_PIXEL");
@@ -587,6 +589,80 @@ describe("parse: 1-входный гейт (крест) — ориентация
     for (let y = 2; y <= 6; y++) wire(g, 5, y);
     const { errors } = parse(g);
     expect(errors.some((e) => e.code === "ERR_PINS_MISMATCH")).toBe(true);
+  });
+});
+
+describe("parse: switch и память", () => {
+  it("распознаёт SWITCH как источник с одним выходом", () => {
+    const g = makeGrid(20, 20);
+    rect(g, 5, 5, SWITCH, 2, 2);
+    wire(g, 7, 5); // восточный выход
+    const { ir, errors } = parse(g);
+    expect(errors).toHaveLength(0);
+    expect(ir.switches).toHaveLength(1);
+    expect(ir.switches[0].net).toBe(0);
+  });
+
+  it("сообщает ERR_SOURCE_TWO_NETS, если SWITCH касается двух сетей", () => {
+    const g = makeGrid(20, 20);
+    rect(g, 5, 5, SWITCH, 2, 2);
+    wire(g, 7, 5); // восток
+    wire(g, 6, 7); // юг — другая сеть
+    const { errors } = parse(g);
+    expect(errors.some((e) => e.code === "ERR_SOURCE_TWO_NETS")).toBe(true);
+  });
+
+  it("распознаёт MEM: вход на западе, выход на востоке", () => {
+    const g = makeGrid(20, 20);
+    rect(g, 5, 5, MEM, 2, 2);
+    wire(g, 4, 5); // западный вход
+    wire(g, 7, 5); // восточный выход
+    const { ir, errors } = parse(g);
+    expect(errors).toHaveLength(0);
+    expect(ir.memories).toHaveLength(1);
+    expect(ir.memories[0].in).toBe(0);
+    expect(ir.memories[0].out).toBe(1);
+  });
+
+  it("сообщает ERR_PINS_MISMATCH, если вход и выход MEM на одной сети", () => {
+    const g = makeGrid(20, 20);
+    rect(g, 5, 5, MEM, 2, 2);
+    // один провод обходит тело сверху и касается и запада (4,5), и востока (7,5)
+    wire(g, 4, 5);
+    vWire(g, 4, 3, 5);
+    hWire(g, 4, 7, 3);
+    vWire(g, 7, 3, 5);
+    const { errors } = parse(g);
+    expect(errors.some((e) => e.code === "ERR_PINS_MISMATCH")).toBe(true);
+  });
+
+  it("сквозной прогон: SWITCH -> MEM -> BULB переключается кликом", () => {
+    const g = makeGrid(20, 20);
+    rect(g, 2, 5, SWITCH, 2, 2); // x2-3 y5-6, E=4
+    hWire(g, 4, 4, 5); // вход памяти
+    rect(g, 5, 5, MEM, 2, 2); // x5-6 y5-6, W=4, E=7
+    hWire(g, 7, 7, 5); // выход
+    rect(g, 8, 5, BULB, 2, 2); // x8-9 y5-6, W=7
+    const { ir, errors } = parse(g);
+    expect(errors).toHaveLength(0);
+    expect(ir.switches).toHaveLength(1);
+    expect(ir.memories).toHaveLength(1);
+    expect(ir.bulbs).toHaveLength(1);
+    expect(ir.memories[0].in).toBe(ir.switches[0].net);
+    expect(ir.bulbs[0].net).toBe(ir.memories[0].out);
+    const s = createSim(ir);
+    const bulb = ir.bulbs[0].net;
+    const press = () => {
+      s.switches[0] = 1;
+      step(s);
+      step(s);
+      s.switches[0] = 0;
+      step(s);
+    };
+    press();
+    expect(s.cur[bulb]).toBe(1);
+    press();
+    expect(s.cur[bulb]).toBe(0);
   });
 });
 

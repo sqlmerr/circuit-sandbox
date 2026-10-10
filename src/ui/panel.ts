@@ -1,4 +1,6 @@
 import { toHex, PALETTE, WIRE_INDEX, roleOf } from "../core/palette";
+import type { Grid2D } from "../core/types";
+import { DEMOS } from "../demos";
 import type { Action, StampType, ToolName } from "./state";
 import { STAMP_DEFS } from "./state";
 import { loadPrefs, savePrefs } from "./prefs";
@@ -14,6 +16,7 @@ export interface PanelBind {
   setCoords: (x: number, y: number) => void;
   setSimRunning: (on: boolean) => void;
   onErrorClick: (cells: [number, number][]) => void;
+  onLoadDemo: (build: () => Grid2D) => void;
 }
 
 export type PanelDispatch = (a: Action) => void;
@@ -64,6 +67,17 @@ export function buildPanels(dispatch: PanelDispatch): PanelBind {
     b.textContent = def.label;
     b.addEventListener("click", () => dispatch({ kind: "stampType", stampType: def.type }));
     stampPal.appendChild(b);
+  }
+
+  // Меню демо: каждая кнопка вставляет готовую схему из src/demos в редактор.
+  const demoList = el("demo-list");
+  for (const demo of DEMOS) {
+    const b = document.createElement("button");
+    b.className = "demo-btn";
+    b.title = demo.hint;
+    b.innerHTML = `<span class="demo-label">${demo.label}</span><span class="demo-hint">${demo.hint}</span>`;
+    b.addEventListener("click", () => bind.onLoadDemo(demo.build));
+    demoList.appendChild(b);
   }
 
   const errorList = el("error-list");
@@ -127,6 +141,7 @@ export function buildPanels(dispatch: PanelDispatch): PanelBind {
       /* button text updated by main */
     },
     onErrorClick: () => {},
+    onLoadDemo: () => {},
   };
 
   return bind;

@@ -35,17 +35,31 @@ export function render(viewport: Viewport, s: State, _canvas: HTMLCanvasElement,
 
   // Лампочки: по факту горят все клетки тела. Клетки тела в IR — не сортированы
   // (порядок flood-fill), поэтому bbox считаем один раз до пиксельного цикла.
+  // Переключатели и ячейки памяти подсвечиваются так же: 1 — ярче, 0 — тускло.
   const bulbBoxes: { minX: number; minY: number; maxX: number; maxY: number; net: number }[] = [];
+  const stateBoxes: { minX: number; minY: number; maxX: number; maxY: number; value: number }[] = [];
   if (isRun && ir) {
-    for (const b of ir.bulbs) {
+    const bbox = (cells: [number, number][]) => {
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      for (const [cx, cy] of b.cells) {
+      for (const [cx, cy] of cells) {
         if (cx < minX) minX = cx;
         if (cx > maxX) maxX = cx;
         if (cy < minY) minY = cy;
         if (cy > maxY) maxY = cy;
       }
-      if (minX <= maxX) bulbBoxes.push({ minX, minY, maxX, maxY, net: b.net });
+      return { minX, minY, maxX, maxY };
+    };
+    for (const b of ir.bulbs) {
+      const bb = bbox(b.cells);
+      if (bb.minX <= bb.maxX) bulbBoxes.push({ ...bb, net: b.net });
+    }
+    for (let i = 0; i < ir.switches.length; i++) {
+      const bb = bbox(ir.switches[i].cells);
+      if (bb.minX <= bb.maxX) stateBoxes.push({ ...bb, value: sim.switches[i] ? 1 : 0 });
+    }
+    for (const m of ir.memories) {
+      const bb = bbox(m.cells);
+      if (bb.minX <= bb.maxX) stateBoxes.push({ ...bb, value: cur[m.out] || 0 });
     }
   }
 
@@ -69,7 +83,7 @@ export function render(viewport: Viewport, s: State, _canvas: HTMLCanvasElement,
           gO = Math.min(255, Math.round(g * WIRE_ON_BRIGHTNESS));
           bO = Math.min(255, Math.round(b * WIRE_ON_BRIGHTNESS));
         }
-      } else if (isRun && netMap && ir) {
+      } else if (isRun && ir) {
         const bulb = bulbBoxes.find(bb => x >= bb.minX && x <= bb.maxX && y >= bb.minY && y <= bb.maxY);
         if (bulb) {
           // Лампочка: при 1 — жёлтый свет, при 0 — тускло (× BULB_OFF_BRIGHTNESS).
@@ -79,6 +93,15 @@ export function render(viewport: Viewport, s: State, _canvas: HTMLCanvasElement,
             rO = Math.min(255, Math.round(r * BULB_OFF_BRIGHTNESS));
             gO = Math.min(255, Math.round(g * BULB_OFF_BRIGHTNESS));
             bO = Math.min(255, Math.round(b * BULB_OFF_BRIGHTNESS));
+          }
+        } else {
+          // Переключатель / ячейка памяти: 1 — тело ярче, 0 — тускло.
+          const box = stateBoxes.find(bb => x >= bb.minX && x <= bb.maxX && y >= bb.minY && y <= bb.maxY);
+          if (box) {
+            const f = box.value ? WIRE_ON_BRIGHTNESS : BULB_OFF_BRIGHTNESS;
+            rO = Math.min(255, Math.round(r * f));
+            gO = Math.min(255, Math.round(g * f));
+            bO = Math.min(255, Math.round(b * f));
           }
         }
       }
@@ -111,6 +134,17 @@ export function render(viewport: Viewport, s: State, _canvas: HTMLCanvasElement,
   for (const w of warnings) {
     overlayCells(ctx, cam, w.cells, "rgba(255,200,0,0.12)");
   }
+
+  // Тонкая рамка по границам полотна (= размер изображения). Пустые клетки и
+  // фон за холстом одного цвета, поэтому без рамки край не виден.
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(170,170,170,0.9)";
+  ctx.strokeRect(
+    cam.ox - 0.5,
+    cam.oy - 0.5,
+    width * cam.scale + 1,
+    height * cam.scale + 1,
+  );
 }
 
 function overlayCells(

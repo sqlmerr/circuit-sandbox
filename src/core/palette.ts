@@ -10,12 +10,14 @@ export type Role =
   | "not"
   | "clock"
   | "high"
+  | "switch"
+  | "mem"
   | "bulb"
   | "pin-out";
 
 export const WIRE_INDEX = 2;
 export const FIRST_DRAWABLE = WIRE_INDEX;
-export const LAST_DRAWABLE = 10;
+export const LAST_DRAWABLE = 12;
 
 export interface PaletteEntry {
   idx: number;
@@ -37,6 +39,8 @@ const ENTRIES: PaletteEntry[] = [
   { idx: 8, hex: "#00FFFF", role: "high", value: "константная единица", rgb: [0x00, 0xff, 0xff] },
   { idx: 9, hex: "#FF8800", role: "bulb", value: "лампочка", rgb: [0xff, 0x88, 0x00] },
   { idx: 10, hex: "#FF69B4", role: "pin-out", value: "маркер выхода (повёрнутые схемы)", rgb: [0xff, 0x69, 0xb4] },
+  { idx: 11, hex: "#00AA55", role: "switch", value: "переключатель (0/1, клик в run)", rgb: [0x00, 0xaa, 0x55] },
+  { idx: 12, hex: "#AA00AA", role: "mem", value: "ячейка памяти (T-триггер)", rgb: [0xaa, 0x00, 0xaa] },
 ];
 
 const UNKNOWN_ENTRY: PaletteEntry = ENTRIES[1];

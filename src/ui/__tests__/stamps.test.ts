@@ -144,3 +144,28 @@ describe("stamps: гейт в любом повороте принимается
     expect(ir.netCount).toBe(2);
   });
 });
+
+describe("stamps: SWITCH и MEM принимаются парсером", () => {
+  it("SWITCH: штамп + восточный провод распознаётся как переключатель", () => {
+    const stamp = makeStamp("switch");
+    const grid = createGrid2D(SIZE, SIZE);
+    place(stamp, grid, 10, 10);
+    wire(grid, 12, 10); // восточный выход (тело x10-11)
+    const { ir, errors } = parse(grid);
+    expect(errors).toHaveLength(0);
+    expect(ir.switches).toHaveLength(1);
+  });
+
+  it("MEM: штамп + западный/восточный провод распознаётся как память", () => {
+    const stamp = makeStamp("mem");
+    const grid = createGrid2D(SIZE, SIZE);
+    place(stamp, grid, 10, 10);
+    wire(grid, 9, 10); // западный вход
+    wire(grid, 12, 10); // восточный выход
+    const { ir, errors } = parse(grid);
+    expect(errors).toHaveLength(0);
+    expect(ir.memories).toHaveLength(1);
+    expect(ir.memories[0].in).toBe(0);
+    expect(ir.memories[0].out).toBe(1);
+  });
+});

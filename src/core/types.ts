@@ -57,6 +57,19 @@ export interface Bulb {
   cells: [number, number][];
 }
 
+export interface Switch {
+  net: number;
+  cells: [number, number][];
+}
+
+// Ячейка памяти — T-триггер: по фронту 0→1 на входе `in` значение выхода `out`
+// инвертируется. Один вход, один выход.
+export interface Memory {
+  in: number;
+  out: number;
+  cells: [number, number][];
+}
+
 export interface IR {
   width: number;
   height: number;
@@ -64,6 +77,8 @@ export interface IR {
   gates: Gate[];
   clocks: Clock[];
   consts: Const[];
+  switches: Switch[];
+  memories: Memory[];
   bulbs: Bulb[];
 }
 
@@ -79,4 +94,11 @@ export interface SimState {
   nxt: Uint8Array;
   ir: IR;
   t: number;
+  // Рантайм-состояние переключателей (значение по индексу в ir.switches).
+  // Не персистится: createSim/reset всегда дают нули.
+  switches: Uint8Array;
+  // Значение T-триггеров (по индексу в ir.memories) и предыдущее значение их
+  // входа — для детекта фронта 0→1.
+  memVal: Uint8Array;
+  memPrev: Uint8Array;
 }

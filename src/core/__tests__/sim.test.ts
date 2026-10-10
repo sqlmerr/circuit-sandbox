@@ -10,6 +10,8 @@ function emptyIR(): IR {
     gates: [],
     clocks: [],
     consts: [],
+    switches: [],
+    memories: [],
     bulbs: [],
   };
 }
@@ -103,5 +105,90 @@ describe("sim: determinism", () => {
       return trace;
     };
     expect(run()).toEqual(run());
+  });
+});
+
+describe("sim: runtime inputs (switch, memory)", () => {
+  it("a SWITCH drives its net from the runtime value", () => {
+    const ir = emptyIR();
+    ir.switches.push({ net: 0, cells: [] });
+    const s = createSim(ir);
+    step(s);
+    expect(s.cur[0]).toBe(0); // стартовое значение — 0
+    s.switches[0] = 1;
+    step(s);
+    expect(s.cur[0]).toBe(1);
+    s.switches[0] = 0;
+    step(s);
+    expect(s.cur[0]).toBe(0);
+  });
+
+  it("a net is the OR of all its drivers (switch 0 must not override HIGH)", () => {
+    const ir = emptyIR();
+    ir.consts.push({ net: 0, value: 1, cells: [] });
+    ir.switches.push({ net: 0, cells: [] });
+    const s = createSim(ir);
+    step(s);
+    expect(s.cur[0]).toBe(1); // HIGH=1, SWITCH=0 -> 1 (0 не гасит 1)
+    s.switches[0] = 1;
+    step(s);
+    expect(s.cur[0]).toBe(1);
+    s.switches[0] = 0;
+    step(s);
+    expect(s.cur[0]).toBe(1); // отпустили переключатель — HIGH держит 1
+  });
+
+  it("a clock that is currently 0 must not override a HIGH on the same net", () => {
+    const ir = emptyIR();
+    ir.consts.push({ net: 0, value: 1, cells: [] });
+    ir.clocks.push({ net: 0, cells: [] });
+    const s = createSim(ir);
+    for (let i = 0; i < 5; i++) step(s); // t < 10: CLOCK = 0
+    expect(s.cur[0]).toBe(1); // но HIGH задаёт 1
+  });
+
+  it("a gate output of 0 does not override a source of 1 on the same net", () => {
+    const ir = emptyIR();
+    ir.consts.push({ net: 0, value: 1, cells: [] });
+    ir.consts.push({ net: 1, value: 0, cells: [] });
+    ir.consts.push({ net: 2, value: 1, cells: [] }); // держит сеть 2 в 1
+    ir.gates.push({ type: "and", ins: [0, 1], out: 2, cells: [] }); // AND(1,0)=0
+    const s = createSim(ir);
+    for (let i = 0; i < 3; i++) step(s);
+    expect(s.cur[2]).toBe(1); // 0 гейта не гасит 1 источника
+  });
+
+  it("a memory cell (T-FF) toggles on each rising edge", () => {
+    const ir = emptyIR();
+    ir.switches.push({ net: 0, cells: [] }); // вход T
+    ir.memories.push({ in: 0, out: 1, cells: [] });
+    const s = createSim(ir);
+    expect(s.cur[1]).toBe(0); // начальное значение памяти — 0
+    const press = () => {
+      // держим вход высоким столько, чтобы фронт дошёл до памяти (1 тик
+      // задержки источника + 1 тик задержки памяти), затем отпускаем
+      s.switches[0] = 1;
+      step(s);
+      step(s);
+      s.switches[0] = 0;
+      step(s);
+    };
+    press();
+    expect(s.cur[1]).toBe(1);
+    press();
+    expect(s.cur[1]).toBe(0);
+    press();
+    expect(s.cur[1]).toBe(1);
+  });
+
+  it("a memory cell holds its value while the input stays high", () => {
+    const ir = emptyIR();
+    ir.consts.push({ net: 0, value: 1, cells: [] });
+    ir.memories.push({ in: 0, out: 1, cells: [] });
+    const s = createSim(ir);
+    for (let i = 0; i < 6; i++) step(s);
+    const held = s.cur[1];
+    for (let i = 0; i < 6; i++) step(s);
+    expect(s.cur[1]).toBe(held); // один фронт — одно переключение
   });
 });

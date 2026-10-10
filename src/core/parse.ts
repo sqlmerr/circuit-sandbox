@@ -11,6 +11,8 @@ const COMPONENT_ROLES = new Set<Role>([
   "not",
   "clock",
   "high",
+  "switch",
+  "mem",
   "bulb",
 ]);
 
@@ -507,6 +509,8 @@ export function parse(grid: Grid2D): ParseResult {
     gates: [],
     clocks: [],
     consts: [],
+    switches: [],
+    memories: [],
     bulbs: [],
   };
 
@@ -579,6 +583,51 @@ export function parse(grid: Grid2D): ParseResult {
           ir.consts.push({ net, value: 1, cells: e.body });
         }
         return net;
+      }
+      case "switch": {
+        // Переключатель — источник с рантайм-значением: нет входов, один выход.
+        const distinctNets = new Set(e.pins.map((p) => p.net));
+        if (distinctNets.size > 1) {
+          errors.push({
+            code: "ERR_SOURCE_TWO_NETS",
+            message: "Переключатель касается двух разных сетей",
+            cells: e.body,
+          });
+          return null;
+        }
+        if (inputs.length !== 0 || outputs.length !== 1) {
+          errors.push({
+            code: "ERR_PINS_MISMATCH",
+            message: "SWITCH: ожидается 1 выход и 0 входов",
+            cells: e.body,
+          });
+          return null;
+        }
+        const swNet = outputNets[0];
+        ir.switches.push({ net: swNet, cells: e.body });
+        return swNet;
+      }
+      case "mem": {
+        // Ячейка памяти (T-триггер): ровно один вход и один выход, причём на
+        // разных сетях (иначе фронт неотличим от выхода).
+        if (inputs.length !== 1 || outputs.length !== 1) {
+          errors.push({
+            code: "ERR_PINS_MISMATCH",
+            message: "MEM: ожидается 1 вход и 1 выход",
+            cells: e.body,
+          });
+          return null;
+        }
+        if (inputNets[0] === outputNets[0]) {
+          errors.push({
+            code: "ERR_PINS_MISMATCH",
+            message: "MEM: вход и выход оказались на одной сети",
+            cells: e.body,
+          });
+          return null;
+        }
+        ir.memories.push({ in: inputNets[0], out: outputNets[0], cells: e.body });
+        return outputNets[0];
       }
       default:
         return null;
