@@ -287,6 +287,19 @@ canvas.addEventListener("wheel", (e) => {
 });
 
 window.addEventListener("keydown", (e) => {
+  // Ввод в поля (размер холста и т.п.): хоткеи канваса не должны срабатывать —
+  // иначе набор цифр 1/2/3 экспортирует схему, а пробел включает пан.
+  const inField =
+    e.target instanceof HTMLInputElement ||
+    e.target instanceof HTMLTextAreaElement ||
+    e.target instanceof HTMLSelectElement;
+  const resizeOpen =
+    typeof resizeOverlay !== "undefined" && !resizeOverlay.classList.contains("hidden");
+  if (inField || resizeOpen) {
+    if (e.key === "Escape") closeResize();
+    else if (e.key === "Enter") applyResize();
+    return;
+  }
   if (e.code === "Space") {
     spaceDown = true;
     e.preventDefault();
@@ -318,7 +331,13 @@ window.addEventListener("keydown", (e) => {
     case "b": dispatch({ kind: "tool", tool: "brush" }); break;
     case "i": dispatch({ kind: "tool", tool: "pipette" }); break;
     case "r": dispatch({ kind: "stampRot" }); break;
-    case "escape": dispatch({ kind: "stampCancel" }); break;
+    case "escape":
+      if (!resizeOverlay.classList.contains("hidden")) closeResize();
+      else dispatch({ kind: "stampCancel" });
+      break;
+    case "enter":
+      if (!resizeOverlay.classList.contains("hidden")) applyResize();
+      break;
     case ".": if (state.ir) stepOnce(); break;
     // export
     case "1": downloadPNG(state.grid, "circuit"); break;
@@ -452,7 +471,114 @@ clearBtn.addEventListener("click", () => {
   resetSim();
 });
 
-// ---- panels ----
+// ---- canvas resize dialog ----
+const MIN_SIZE = 16;
+const MAX_SIZE = 512;
+const resizeBtn = el<HTMLButtonElement>("tool-resize");
+const resizeOverlay = el("resize-overlay");
+const resizeW = el<HTMLInputElement>("resize-w");
+const resizeH = el<HTMLInputElement>("resize-h");
+const resizeKeep = el<HTMLInputElement>("resize-keep");
+const resizeWarn = el("resize-warn");
+const anchorBox = el("resize-anchor");
+let anchorX = 0;
+let anchorY = 0;
+
+function syncAnchorBtns(): void {
+  for (const b of anchorBox.querySelectorAll<HTMLButtonElement>(".anchor-btn")) {
+    const active = Number(b.dataset.ax) === anchorX && Number(b.dataset.ay) === anchorY;
+    b.classList.toggle("active", active);
+  }
+}
+
+function updateResizeWarn(): void {
+  const w = Math.round(Number(resizeW.value));
+  const h = Math.round(Number(resizeH.value));
+  const shrink =
+    resizeKeep.checked && (w < state.grid.width || h < state.grid.height);
+  resizeWarn.classList.toggle("hidden", !shrink);
+  if (shrink) resizeWarn.textContent = "Новый холст меньше — края схемы будут обрезаны.";
+}
+
+function openResize(): void {
+  resizeW.value = String(state.grid.width);
+  resizeH.value = String(state.grid.height);
+  resizeKeep.checked = true;
+  anchorX = 0;
+  anchorY = 0;
+  syncAnchorBtns();
+  updateResizeWarn();
+  resizeOverlay.classList.remove("hidden");
+  resizeW.focus();
+  resizeW.select();
+}
+
+function closeResize(): void {
+  resizeOverlay.classList.add("hidden");
+}
+
+function resizeGridWithAnchor(old: Grid2D, newW: number, newH: number): Grid2D {
+  const g = createGrid2D(newW, newH);
+  if (!resizeKeep.checked) return g;
+  // Сдвиг старого содержимого внутри нового холста по якорю:
+  // (0,0) — левый верх (координаты сохраняются), (0.5,0.5) — центр и т.д.
+  const ox = Math.round((newW - old.width) * anchorX);
+  const oy = Math.round((newH - old.height) * anchorY);
+  const x0 = Math.max(0, ox);
+  const y0 = Math.max(0, oy);
+  const x1 = Math.min(newW, ox + old.width);
+  const y1 = Math.min(newH, oy + old.height);
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      g.data[y * newW + x] = old.data[(y - oy) * old.width + (x - ox)];
+    }
+  }
+  return g;
+}
+
+function applyResize(): void {
+  const w = Math.round(Number(resizeW.value));
+  const h = Math.round(Number(resizeH.value));
+  if (!Number.isInteger(w) || !Number.isInteger(h) || w < MIN_SIZE || w > MAX_SIZE || h < MIN_SIZE || h > MAX_SIZE) {
+    resizeWarn.classList.remove("hidden");
+    resizeWarn.textContent = `Размер — целые числа ${MIN_SIZE}..${MAX_SIZE}.`;
+    return;
+  }
+  if (w === state.grid.width && h === state.grid.height) {
+    closeResize();
+    return;
+  }
+  closeResize();
+  // Режим — в edit, камеру не трогаем (пользователь остаётся где был).
+  state = apply(state, { kind: "mode", mode: "edit" });
+  commitEdit(resizeGridWithAnchor(state.grid, w, h));
+  resetSim();
+}
+
+resizeBtn.addEventListener("click", openResize);
+el<HTMLButtonElement>("resize-cancel").addEventListener("click", closeResize);
+el<HTMLButtonElement>("resize-apply").addEventListener("click", applyResize);
+resizeOverlay.addEventListener("mousedown", (e) => {
+  if (e.target === resizeOverlay) closeResize();
+});
+resizeW.addEventListener("input", updateResizeWarn);
+resizeH.addEventListener("input", updateResizeWarn);
+resizeKeep.addEventListener("change", updateResizeWarn);
+anchorBox.addEventListener("click", (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLButtonElement>(".anchor-btn");
+  if (!b) return;
+  anchorX = Number(b.dataset.ax);
+  anchorY = Number(b.dataset.ay);
+  syncAnchorBtns();
+});
+for (const b of document.querySelectorAll<HTMLButtonElement>("[data-preset]")) {
+  b.addEventListener("click", () => {
+    const [w, h] = b.dataset.preset!.split("x").map(Number);
+    resizeW.value = String(w);
+    resizeH.value = String(h);
+    updateResizeWarn();
+  });
+}
 panels = buildPanels((a) => dispatch(a));
 panels.onLoadDemo = (build) => loadDemo(build);
 panels.onErrorClick = (cells) => {

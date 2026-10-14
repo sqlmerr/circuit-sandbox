@@ -20,6 +20,7 @@
         </div>
         <div class="row">
           <button id="tool-clear" class="btn danger" title="Удалить всё полотно (нужно подтвердить)">Очистить</button>
+          <button id="tool-resize" class="btn" title="Изменить размер холста">Размер</button>
         </div>
       </div>
     </div>
@@ -94,6 +95,36 @@
   </div>
 
   <button id="ui-show" title="Показать интерфейс (H)">☰</button>
+
+  <div id="resize-overlay" class="hidden">
+    <div id="resize-dialog" role="dialog" aria-modal="true" aria-labelledby="resize-title">
+      <div class="resize-title" id="resize-title">Размер холста</div>
+      <div class="resize-dims">
+        <label>Ширина <input type="number" id="resize-w" min="16" max="512" step="1" /></label>
+        <span class="resize-x">×</span>
+        <label>Высота <input type="number" id="resize-h" min="16" max="512" step="1" /></label>
+      </div>
+      <div class="resize-presets">
+        <button class="btn" data-preset="32x32">32</button>
+        <button class="btn" data-preset="64x64">64</button>
+        <button class="btn" data-preset="128x128">128</button>
+        <button class="btn" data-preset="256x256">256</button>
+        <button class="btn" data-preset="512x512">512</button>
+      </div>
+      <label class="resize-keep"><input type="checkbox" id="resize-keep" checked /> Сохранить содержимое</label>
+      <div class="resize-anchor-row">
+        <span class="row-label">Положение</span>
+        <div id="resize-anchor">
+          <button class="btn anchor-btn" data-ax="0" data-ay="0" title="Сверху слева">↖</button><button class="btn anchor-btn" data-ax="0.5" data-ay="0" title="Сверху по центру">↑</button><button class="btn anchor-btn" data-ax="1" data-ay="0" title="Сверху справа">↗</button><button class="btn anchor-btn" data-ax="0" data-ay="0.5" title="Слева по центру">←</button><button class="btn anchor-btn" data-ax="0.5" data-ay="0.5" title="По центру">•</button><button class="btn anchor-btn" data-ax="1" data-ay="0.5" title="Справа по центру">→</button><button class="btn anchor-btn" data-ax="0" data-ay="1" title="Снизу слева">↙</button><button class="btn anchor-btn" data-ax="0.5" data-ay="1" title="Снизу по центру">↓</button><button class="btn anchor-btn" data-ax="1" data-ay="1" title="Снизу справа">↘</button>
+        </div>
+      </div>
+      <div id="resize-warn" class="resize-warn hidden"></div>
+      <div class="resize-actions">
+        <button id="resize-cancel" class="btn">Отмена</button>
+        <button id="resize-apply" class="btn active">Применить</button>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="/src/ui/main.ts"></script>
 </body>
