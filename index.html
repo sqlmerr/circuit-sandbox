@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Pixel Logic Circuits</title>
+  <script type="module" crossorigin src="/assets/index-Cs8e4mDv.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BkU0ZM4X.css">
+</head>
+<body>
+  <canvas id="viewport"></canvas>
+
+  <div id="dock-left" class="dock">
+    <div id="panel-toolbar" class="panel" data-panel="toolbar">
+      <div class="panel-header"><span>Инструменты</span><button class="collapse-btn" title="Свернуть">▾</button></div>
+      <div class="panel-body">
+        <div id="tool-buttons">
+          <button id="tool-brush" class="tool-btn" title="Кисть (B)">B</button>
+          <button id="tool-stamp" class="tool-btn" title="Штамп (P)">S</button>
+          <button id="tool-pipette" class="tool-btn" title="Пипетка (I)">I</button>
+        </div>
+        <div class="row">
+          <button id="tool-clear" class="btn danger" title="Удалить всё полотно (нужно подтвердить)">Очистить</button>
+          <button id="tool-resize" class="btn" title="Изменить размер холста">Размер</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="panel-demos" class="panel" data-panel="demos">
+      <div class="panel-header"><span>Демо</span><button class="collapse-btn" title="Свернуть">▾</button></div>
+      <div class="panel-body"><div id="demo-list"></div></div>
+    </div>
+
+    <div id="panel-stamps" class="panel" data-panel="stamps">
+      <div class="panel-header"><span>Штампы</span><button class="collapse-btn" title="Свернуть">▾</button></div>
+      <div class="panel-body"><div id="stamp-palette"></div></div>
+    </div>
+
+    <div id="panel-wires" class="panel" data-panel="wires">
+      <div class="panel-header"><span>Цвета</span><button class="collapse-btn" title="Свернуть">▾</button></div>
+      <div class="panel-body"><div id="wire-palette"></div></div>
+    </div>
+  </div>
+
+  <div id="dock-right" class="dock">
+    <div id="panel-sim" class="panel" data-panel="sim">
+      <div class="panel-header"><span>Симуляция</span><button class="collapse-btn" title="Свернуть">▾</button></div>
+      <div class="panel-body">
+        <div class="row">
+          <button id="sim-play" class="btn">▶</button>
+          <button id="sim-step" class="btn">Шаг</button>
+          <button id="sim-reset" class="btn">Выкл</button>
+        </div>
+        <label id="sim-speed">Скорость
+          <input type="range" id="sim-speed-slider" min="1" max="60" value="10" />
+          <span id="sim-speed-val">10</span>
+        </label>
+      </div>
+    </div>
+
+    <div id="panel-view" class="panel" data-panel="view">
+      <div class="panel-header"><span>Вид</span><button class="collapse-btn" title="Свернуть">▾</button></div>
+      <div class="panel-body">
+        <div class="row">
+          <span class="row-label">Канвас</span>
+          <button id="view-zoom-out" class="btn" title="Отдалить (−)">−</button>
+          <button id="view-zoom-in" class="btn" title="Приблизить (+)">+</button>
+          <button id="view-fit" class="btn" title="Вписать схему в экран">Вписать</button>
+        </div>
+        <div class="row">
+          <span class="row-label">Интерфейс</span>
+          <button id="ui-smaller" class="btn" title="Уменьшить интерфейс ([)">−</button>
+          <button id="ui-bigger" class="btn" title="Увеличить интерфейс (])">+</button>
+          <span id="ui-scale-val">100%</span>
+        </div>
+        <div class="row">
+          <span class="row-label">Файл</span>
+          <button id="imp-open" class="btn" title="Открыть схему из картинки (PNG/JPG/WebP) или JSON (Ctrl+O)">Открыть</button>
+          <input type="file" id="imp-file" accept="image/*,.json,application/json" />
+          <div id="exp-menu" class="menu">
+            <button id="exp-toggle" class="btn" title="Экспорт схемы: PNG (1), JSON (2), SVG (3)" aria-haspopup="menu" aria-expanded="false">Экспорт ▾</button>
+            <div id="exp-dropdown" class="menu-list hidden" role="menu">
+              <button class="menu-item" data-fmt="png" role="menuitem" title="Скачать PNG — основной формат, с метаданными схемы (1)">
+                <span class="menu-label">PNG</span><span class="menu-hint">картинка · 1</span>
+              </button>
+              <button class="menu-item" data-fmt="json" role="menuitem" title="Скачать JSON — данные, для отладки и обмена (2)">
+                <span class="menu-label">JSON</span><span class="menu-hint">данные · 2</span>
+              </button>
+              <button class="menu-item" data-fmt="svg" role="menuitem" title="Скачать SVG — векторный рендер схемы (3)">
+                <span class="menu-label">SVG</span><span class="menu-hint">вектор · 3</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <button id="ui-hide" class="btn" title="Скрыть все панели (H)">Скрыть UI</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="dock-bottom" class="dock">
+    <div id="panel-errors" class="panel" data-panel="errors">
+      <div class="panel-header"><span>Ошибки</span><button class="collapse-btn" title="Свернуть">▾</button></div>
+      <div class="panel-body"><div id="error-list"></div></div>
+    </div>
+    <div id="panel-status" class="panel">
+      <span id="coords-display">X: — Y: —</span>
+      <span id="status-toast" class="hidden"></span>
+    </div>
+  </div>
+
+  <button id="ui-show" title="Показать интерфейс (H)">☰</button>
+
+  <div id="resize-overlay" class="hidden">
+    <div id="resize-dialog" role="dialog" aria-modal="true" aria-labelledby="resize-title">
+      <div class="resize-title" id="resize-title">Размер холста</div>
+      <div class="resize-dims">
+        <label>Ширина <input type="number" id="resize-w" min="16" max="512" step="1" /></label>
+        <span class="resize-x">×</span>
+        <label>Высота <input type="number" id="resize-h" min="16" max="512" step="1" /></label>
+      </div>
+      <div class="resize-presets">
+        <button class="btn" data-preset="32x32">32</button>
+        <button class="btn" data-preset="64x64">64</button>
+        <button class="btn" data-preset="128x128">128</button>
+        <button class="btn" data-preset="256x256">256</button>
+        <button class="btn" data-preset="512x512">512</button>
+      </div>
+      <label class="resize-keep"><input type="checkbox" id="resize-keep" checked /> Сохранить содержимое</label>
+      <div class="resize-anchor-row">
+        <span class="row-label">Положение</span>
+        <div id="resize-anchor">
+          <button class="btn anchor-btn" data-ax="0" data-ay="0" title="Сверху слева">↖</button><button class="btn anchor-btn" data-ax="0.5" data-ay="0" title="Сверху по центру">↑</button><button class="btn anchor-btn" data-ax="1" data-ay="0" title="Сверху справа">↗</button><button class="btn anchor-btn" data-ax="0" data-ay="0.5" title="Слева по центру">←</button><button class="btn anchor-btn" data-ax="0.5" data-ay="0.5" title="По центру">•</button><button class="btn anchor-btn" data-ax="1" data-ay="0.5" title="Справа по центру">→</button><button class="btn anchor-btn" data-ax="0" data-ay="1" title="Снизу слева">↙</button><button class="btn anchor-btn" data-ax="0.5" data-ay="1" title="Снизу по центру">↓</button><button class="btn anchor-btn" data-ax="1" data-ay="1" title="Снизу справа">↘</button>
+        </div>
+      </div>
+      <div id="resize-warn" class="resize-warn hidden"></div>
+      <div class="resize-actions">
+        <button id="resize-cancel" class="btn">Отмена</button>
+        <button id="resize-apply" class="btn active">Применить</button>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
