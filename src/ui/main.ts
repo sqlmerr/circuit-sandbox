@@ -12,6 +12,7 @@ import {
   downloadPNG,
   downloadJSON,
   downloadSVG,
+  openFile,
   saveToLocal,
   loadFromLocal,
 } from "./fileio";
@@ -127,11 +128,10 @@ function resetSim(): void {
   render(viewport(), state, canvas, ctx);
 }
 
-// ---- load a built-in demo into the editor ----
-// Полностью замещает полотно готовой схемой из src/demos: сбрасывает
-// симуляцию, пересобирает IR сразу (без debounce) и вписывает камеру.
-function loadDemo(build: () => Grid2D): void {
-  const grid = build();
+// ---- load a grid into the editor (демо, импорт файла) ----
+// Полностью замещает полотно: сбрасывает симуляцию, пересобирает IR сразу
+// (без debounce), вписывает камеру; вставка обратима через Ctrl+Z.
+function loadGrid(grid: Grid2D): void {
   undo.commit(grid);
   state = apply(state, { kind: "mode", mode: "edit" });
   state = apply(state, { kind: "grid", grid });
@@ -140,6 +140,11 @@ function loadDemo(build: () => Grid2D): void {
   fitView();
   doParse();
   resetSim();
+}
+
+// ---- load a built-in demo into the editor ----
+function loadDemo(build: () => Grid2D): void {
+  loadGrid(build());
 }
 
 // ---- editing commit wrapper ----
@@ -300,6 +305,11 @@ window.addEventListener("keydown", (e) => {
     else if (e.key === "Enter") applyResize();
     return;
   }
+  // Esc сначала закрывает открытое меню экспорта, потом всё остальное
+  if (e.key === "Escape" && expMenuOpen()) {
+    closeExpMenu();
+    return;
+  }
   if (e.code === "Space") {
     spaceDown = true;
     e.preventDefault();
@@ -326,6 +336,12 @@ window.addEventListener("keydown", (e) => {
     return;
   }
 
+  if (e.ctrlKey && k === "o") {
+    e.preventDefault();
+    openImportDialog();
+    return;
+  }
+
   switch (k) {
     case "p": dispatch({ kind: "tool", tool: "stamp" }); break;
     case "b": dispatch({ kind: "tool", tool: "brush" }); break;
@@ -340,9 +356,9 @@ window.addEventListener("keydown", (e) => {
       break;
     case ".": if (state.ir) stepOnce(); break;
     // export
-    case "1": downloadPNG(state.grid, "circuit"); break;
-    case "2": downloadJSON(state.grid); break;
-    case "3": downloadSVG(state.grid); break;
+    case "1": closeExpMenu(); downloadPNG(state.grid, "circuit"); break;
+    case "2": closeExpMenu(); downloadJSON(state.grid); break;
+    case "3": closeExpMenu(); downloadSVG(state.grid); break;
     // canvas zoom (centered)
     case "=":
     case "+": zoomAt(1.25); break;
@@ -441,9 +457,109 @@ el<HTMLButtonElement>("ui-smaller").addEventListener("click", () => bumpUiScale(
 el<HTMLButtonElement>("ui-bigger").addEventListener("click", () => bumpUiScale(UI_SCALE_STEP));
 el<HTMLButtonElement>("ui-hide").addEventListener("click", () => setUiHidden(true));
 el<HTMLButtonElement>("ui-show").addEventListener("click", () => setUiHidden(false));
-el<HTMLButtonElement>("exp-png").addEventListener("click", () => downloadPNG(state.grid, "circuit"));
-el<HTMLButtonElement>("exp-json").addEventListener("click", () => downloadJSON(state.grid));
-el<HTMLButtonElement>("exp-svg").addEventListener("click", () => downloadSVG(state.grid));
+// ---- export menu: одна кнопка «Экспорт» → PNG / JSON / SVG ----
+// Список переносится в <body>: панель лежит в доке с overflow-y:auto и
+// абсолютное меню внутри неё обрезалось бы краем дока.
+const expToggle = el<HTMLButtonElement>("exp-toggle");
+const expDropdown = el("exp-dropdown");
+document.body.appendChild(expDropdown);
+
+function expMenuOpen(): boolean {
+  return !expDropdown.classList.contains("hidden");
+}
+
+function closeExpMenu(): void {
+  expDropdown.classList.add("hidden");
+  expToggle.classList.remove("active");
+  expToggle.setAttribute("aria-expanded", "false");
+  expToggle.textContent = "Экспорт ▾";
+}
+
+function openExpMenu(): void {
+  expDropdown.classList.remove("hidden"); // сначала показ — иначе не измерить размер
+  expToggle.classList.add("active");
+  expToggle.setAttribute("aria-expanded", "true");
+  expToggle.textContent = "Экспорт ▴";
+  // позиция считается по кнопке; у нижнего края экрана список открывается вверх
+  const r = expToggle.getBoundingClientRect();
+  const mw = expDropdown.offsetWidth;
+  const mh = expDropdown.offsetHeight;
+  const left = Math.max(8, Math.min(r.left, window.innerWidth - mw - 8));
+  const top =
+    r.bottom + 4 + mh > window.innerHeight - 8
+      ? Math.max(8, r.top - 4 - mh)
+      : r.bottom + 4;
+  expDropdown.style.left = `${Math.round(left)}px`;
+  expDropdown.style.top = `${Math.round(top)}px`;
+}
+
+const exportActions: Record<string, () => void> = {
+  png: () => downloadPNG(state.grid, "circuit"),
+  json: () => downloadJSON(state.grid),
+  svg: () => downloadSVG(state.grid),
+};
+
+expToggle.addEventListener("click", (e) => {
+  e.stopPropagation(); // не даём клику долететь до document и мгновенно закрыть меню
+  if (expMenuOpen()) closeExpMenu();
+  else openExpMenu();
+});
+
+for (const item of expDropdown.querySelectorAll<HTMLButtonElement>(".menu-item")) {
+  item.addEventListener("click", () => {
+    const run = exportActions[item.dataset.fmt ?? ""];
+    closeExpMenu();
+    run?.();
+  });
+}
+
+document.addEventListener("click", (e) => {
+  if (!expMenuOpen()) return;
+  if (e.target instanceof Node && expDropdown.contains(e.target)) return;
+  closeExpMenu();
+});
+
+// ---- status toast: сообщения вне парсинга (импорт файла и т.п.) ----
+const toastEl = el("status-toast");
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+function toast(msg: string, isError = false): void {
+  toastEl.textContent = msg;
+  toastEl.classList.toggle("error", isError);
+  toastEl.classList.remove("hidden");
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toastEl.classList.add("hidden");
+    toastTimer = null;
+  }, 5000);
+}
+
+// ---- open a file: картинка (PNG/JPG/WebP/…) или JSON ----
+const impOpen = el<HTMLButtonElement>("imp-open");
+const impFile = el<HTMLInputElement>("imp-file");
+
+function openImportDialog(): void {
+  impFile.value = ""; // сброс, чтобы выбрать тот же файл повторно
+  impFile.click();
+}
+
+impOpen.addEventListener("click", openImportDialog);
+
+impFile.addEventListener("change", () => {
+  const file = impFile.files?.[0];
+  impFile.value = "";
+  if (!file) return;
+  void openImportedFile(file);
+});
+
+async function openImportedFile(file: File): Promise<void> {
+  try {
+    const grid = await openFile(file);
+    loadGrid(grid);
+    toast(`Открыто: ${file.name} — ${grid.width}×${grid.height}`);
+  } catch (err) {
+    toast(`Не удалось открыть: ${err instanceof Error ? err.message : String(err)}`, true);
+  }
+}
 
 // ---- clear all (two-step confirm, undoable via Ctrl+Z) ----
 const clearBtn = el<HTMLButtonElement>("tool-clear");

@@ -104,10 +104,19 @@ html, body {
 
 #panel-status {
   flex: 0 0 auto;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 10px;
   padding: 6px 10px;
   font-size: 12px;
   white-space: nowrap;
 }
+
+#coords-display { color: #888; }
+
+#status-toast { color: #ffcc66; }
+#status-toast.error { color: #ff8888; }
+#status-toast.hidden { display: none; }
 
 .panel-header {
   display: flex;
@@ -178,6 +187,48 @@ html, body {
 .btn.danger { border-color: #7a2e2e; color: #ff8888; }
 .btn.danger:hover { background: #4a1f1f; border-color: #a04040; }
 .btn.danger.armed { background: #6b1a1a; border-color: #ff4444; color: #fff; }
+
+/* ---------- export dropdown (список живёт в body, см. ui/main.ts) ---------- */
+.menu {
+  display: inline-block;
+}
+
+.menu-list {
+  position: fixed;
+  z-index: 40;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  background: #1a1a1a;
+  border: 1px solid #4a4a4a;
+  border-radius: 5px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.menu-list.hidden { display: none; }
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 8px;
+  background: #1f1f1f;
+  color: #d4d4d4;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.menu-item:hover { background: #3a3a3a; border-color: #666; color: #fff; }
+.menu-hint { font-size: 10px; color: #888; }
+
+/* файловый input живёт в строке «Файл», но сам в раскладке не участвует */
+#imp-file { display: none; }
 
 .tool-btn {
   width: 32px;

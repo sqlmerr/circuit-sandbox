@@ -99,40 +99,69 @@ export function downloadSVG(grid: Grid2D): void {
 
 export async function openFile(file: File): Promise<Grid2D> {
   if (file.name.toLowerCase().endsWith(".json")) {
-    const text = await file.text();
-    const parsed = JSON.parse(text) as {
-      format?: string;
-      version?: number;
-      width?: number;
-      height?: number;
-      pixels?: string;
-    };
-    if (parsed.version !== 2 && parsed.version !== 3) {
-      throw new Error("Несовместимый формат: нужен pixel-logic v3 (номера цветов изменились)");
-    }
-    if (!parsed.pixels) throw new Error("Некорректный JSON");
-    let bytes = decodeBase64(parsed.pixels);
-    if (parsed.version === 2) bytes = migrateV2(bytes); // 10→unknown, 11→bulb(9)
-    const w = clamp(parsed.width ?? SIZE_DEFAULT, SIZE_MIN, SIZE_MAX);
-    const h = clamp(parsed.height ?? SIZE_DEFAULT, SIZE_MIN, SIZE_MAX);
-    const g = createGrid2D(w, h);
-    g.data.set(bytes.subarray(0, w * h));
-    return g;
+    return gridFromJSON(await file.text());
   }
-  // PNG: decode via browser image path
+  // картинка (PNG/JPG/WebP/…): decode via browser image path
   return await decodeImageFile(file);
 }
 
+// Чистый разбор JSON-файла схемы (v2/v3) — вынесен отдельно ради тестов.
+export function gridFromJSON(text: string): Grid2D {
+  const parsed = JSON.parse(text) as {
+    format?: string;
+    version?: number;
+    width?: number;
+    height?: number;
+    pixels?: string;
+  };
+  if (parsed.version !== 2 && parsed.version !== 3) {
+    throw new Error("Несовместимый формат: нужен pixel-logic v3 (номера цветов изменились)");
+  }
+  if (!parsed.pixels) throw new Error("Некорректный JSON");
+  let bytes = decodeBase64(parsed.pixels);
+  if (parsed.version === 2) bytes = migrateV2(bytes); // 10→unknown, 11→bulb(9)
+  const w = parsed.width ?? SIZE_DEFAULT;
+  const h = parsed.height ?? SIZE_DEFAULT;
+  // Размер не «зажимаем» молча: пиксели в файле упакованы под исходную
+  // ширину, и клампинг перекроил бы их посреди строки — схема поехала бы.
+  if (
+    !Number.isInteger(w) || !Number.isInteger(h) ||
+    w < SIZE_MIN || w > SIZE_MAX || h < SIZE_MIN || h > SIZE_MAX
+  ) {
+    throw new Error(`Размер схемы ${w}×${h} вне допустимого диапазона ${SIZE_MIN}..${SIZE_MAX}`);
+  }
+  if (bytes.length < w * h) throw new Error(`В JSON ${bytes.length} пикселей, а заявлено ${w}×${h}`);
+  const g = createGrid2D(w, h);
+  g.data.set(bytes.subarray(0, w * h));
+  return g;
+}
+
 async function decodeImageFile(file: File): Promise<Grid2D> {
-  const bitmap = await createImageBitmap(file);
-  const width = bitmap.width;
-  const height = bitmap.height;
-  const canvas = new OffscreenCanvas(width, height);
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    throw new Error("Браузер не смог прочитать файл — нужны PNG, JPG, WebP или GIF");
+  }
+  const srcW = bitmap.width;
+  const srcH = bitmap.height;
+  // Целочисленное уменьшение nearest-neighbour: пиксель в пиксель, без
+  // сглаживания — смешение цветов сломало бы квантование в палитру.
+  const factor = Math.max(1, Math.ceil(Math.max(srcW, srcH) / SIZE_MAX));
+  const w = Math.max(1, Math.round(srcW / factor));
+  const h = Math.max(1, Math.round(srcH / factor));
+  const canvas = new OffscreenCanvas(w, h);
   const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(bitmap, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(bitmap, 0, 0, w, h);
   bitmap.close();
-  const imgData = ctx.getImageData(0, 0, width, height);
-  return gridFromRGBA(imgData.data, width, height);
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const grid = gridFromRGBA(imgData.data, w, h);
+  // минимальный холст 16×16: мелкую картинку дополняем пустым полем
+  if (w >= SIZE_MIN && h >= SIZE_MIN) return grid;
+  const g = createGrid2D(Math.max(SIZE_MIN, w), Math.max(SIZE_MIN, h));
+  for (let y = 0; y < h; y++) g.data.set(grid.data.subarray(y * w, y * w + w), y * g.width);
+  return g;
 }
 
 function clamp(v: number, lo: number, hi: number): number {

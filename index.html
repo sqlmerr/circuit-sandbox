@@ -73,9 +73,23 @@
           <span id="ui-scale-val">100%</span>
         </div>
         <div class="row">
-          <button id="exp-png" class="btn" title="Скачать PNG (1)">PNG</button>
-          <button id="exp-json" class="btn" title="Скачать JSON (2)">JSON</button>
-          <button id="exp-svg" class="btn" title="Скачать SVG (3)">SVG</button>
+          <span class="row-label">Файл</span>
+          <button id="imp-open" class="btn" title="Открыть схему из картинки (PNG/JPG/WebP) или JSON (Ctrl+O)">Открыть</button>
+          <input type="file" id="imp-file" accept="image/*,.json,application/json" />
+          <div id="exp-menu" class="menu">
+            <button id="exp-toggle" class="btn" title="Экспорт схемы: PNG (1), JSON (2), SVG (3)" aria-haspopup="menu" aria-expanded="false">Экспорт ▾</button>
+            <div id="exp-dropdown" class="menu-list hidden" role="menu">
+              <button class="menu-item" data-fmt="png" role="menuitem" title="Скачать PNG — основной формат, с метаданными схемы (1)">
+                <span class="menu-label">PNG</span><span class="menu-hint">картинка · 1</span>
+              </button>
+              <button class="menu-item" data-fmt="json" role="menuitem" title="Скачать JSON — данные, для отладки и обмена (2)">
+                <span class="menu-label">JSON</span><span class="menu-hint">данные · 2</span>
+              </button>
+              <button class="menu-item" data-fmt="svg" role="menuitem" title="Скачать SVG — векторный рендер схемы (3)">
+                <span class="menu-label">SVG</span><span class="menu-hint">вектор · 3</span>
+              </button>
+            </div>
+          </div>
         </div>
         <div class="row">
           <button id="ui-hide" class="btn" title="Скрыть все панели (H)">Скрыть UI</button>
@@ -91,6 +105,7 @@
     </div>
     <div id="panel-status" class="panel">
       <span id="coords-display">X: — Y: —</span>
+      <span id="status-toast" class="hidden"></span>
     </div>
   </div>
 
