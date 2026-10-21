@@ -89,6 +89,24 @@ export interface ParseResult {
   netMap: Int32Array;
 }
 
+/**
+ * Петля обратной связи: группа гейтов, чьи выходы (через сети) приходят
+ * обратно на входы внутри группы. Кольцо из двух инверторов, RS-защёлка,
+ * кольцевой генератор — всё это петли.
+ */
+export interface SimLoop {
+  /** Индексы гейтов петли в ir.gates (по возрастанию). */
+  gates: number[];
+  /** Внутренние сети петли: их ведут и читают гейты петли. */
+  nets: number[];
+  /** Для каждой внутренней сети — индексы гейтов петли, которые её ведут. */
+  drivers: Map<number, number[]>;
+  /** Флаг «сеть внутренняя» (размер netCount) — для быстрого чтения входа. */
+  internal: Uint8Array;
+  /** Сети-кандидаты на «зажим» при удержании состояния (в порядке гейтов). */
+  seeds: number[];
+}
+
 export interface SimState {
   cur: Uint8Array;
   nxt: Uint8Array;
@@ -101,4 +119,10 @@ export interface SimState {
   // входа — для детекта фронта 0→1.
   memVal: Uint8Array;
   memPrev: Uint8Array;
+  // Петли обратной связи (в порядке разрешения: зависимости раньше).
+  loops: SimLoop[];
+  // Флаг «гейт принадлежит петле» (размер ir.gates.length).
+  loopGate: Uint8Array;
+  // Рабочий буфер для значений сетей петли (размер netCount).
+  work: Uint8Array;
 }

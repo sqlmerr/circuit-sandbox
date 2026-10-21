@@ -1,5 +1,6 @@
 import type { Grid2D } from "../core/types";
-import { ringNot } from "./ringNot";
+import { sramCell } from "./sramCell";
+import { ringOsc } from "./ringOsc";
 import { halfAdder } from "./halfAdder";
 import { rsLatch } from "./rsLatch";
 import { toggleMemory } from "./memory";
@@ -16,7 +17,8 @@ export interface DemoDef {
 }
 
 export const DEMOS: DemoDef[] = [
-  { id: "ringNot", label: "Кольцо из двух NOT", hint: "Мигает с периодом 2 тика", build: ringNot },
+  { id: "sramCell", label: "Ячейка SRAM", hint: "2 инвертора в кольце держат бит: SET/RESET", build: sramCell },
+  { id: "ringOsc", label: "Кольцевой генератор", hint: "3 инвертора: нечётное число — генератор", build: ringOsc },
   { id: "halfAdder", label: "Полусумматор", hint: "XOR + AND, входы — тумблеры", build: halfAdder },
   { id: "rsLatch", label: "RS-триггер", hint: "OR + NOT: set / hold / reset", build: rsLatch },
   { id: "memory", label: "Ячейка памяти", hint: "SWITCH → T-триггер → BULB", build: toggleMemory },

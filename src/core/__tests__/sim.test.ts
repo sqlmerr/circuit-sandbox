@@ -68,22 +68,57 @@ describe("sim: net without driver is 0", () => {
   });
 });
 
-describe("sim: two NOT ring oscillates", () => {
-  it("oscillates with period 2", () => {
+describe("sim: петли обратной связи", () => {
+  it("кольцо из двух NOT — бистабильно: держит состояние, а не мигает", () => {
     const ir = emptyIR();
     ir.gates.push({ type: "not", ins: [1], out: 0, cells: [] });
     ir.gates.push({ type: "not", ins: [0], out: 1, cells: [] });
     const s = createSim(ir);
-    const net0: number[] = [];
+    const trace: number[] = [];
     for (let i = 0; i < 12; i++) {
-      net0.push(s.cur[0]);
+      trace.push(s.cur[0]);
       step(s);
     }
-    // In any steady loop, net0 alternates every tick -> period 2
-    for (let i = 2; i < net0.length; i++) {
-      expect(net0[i]).toBe(net0[i - 2]);
+    // Устойчивое состояние: в реальной схеме это ячейка SRAM, она держит бит.
+    const held = trace.slice(2);
+    for (const v of held) expect(v).toBe(held[0]);
+    // Узлы кольца всегда противоположны (это инверторы).
+    expect(s.cur[0]).not.toBe(s.cur[1]);
+  });
+
+  it("кольцо из трёх NOT — генератор: волна бежит по кольцу, период 6 тиков", () => {
+    const ir = emptyIR();
+    ir.gates.push({ type: "not", ins: [2], out: 0, cells: [] });
+    ir.gates.push({ type: "not", ins: [0], out: 1, cells: [] });
+    ir.gates.push({ type: "not", ins: [1], out: 2, cells: [] });
+    const s = createSim(ir);
+    const trace: number[] = [];
+    for (let i = 0; i < 14; i++) {
+      trace.push(s.cur[0]);
+      step(s);
     }
-    expect(net0[0] !== net0[1]).toBe(true);
+    // Период колебаний = 2 × число инверторов × задержка(1 тик) = 6.
+    for (let i = 6; i < trace.length; i++) expect(trace[i]).toBe(trace[i - 6]);
+    // Сигнал действительно меняется (кольцо не застыло).
+    expect(trace.slice(0, 6)).not.toEqual(trace.slice(1, 7));
+  });
+
+  it("кольцо из двух NOT переключается внешним источником (запись бита)", () => {
+    const ir = emptyIR();
+    ir.gates.push({ type: "not", ins: [1], out: 0, cells: [] });
+    ir.gates.push({ type: "not", ins: [0], out: 1, cells: [] });
+    ir.switches.push({ net: 0, cells: [] }); // источник «1» на узел 0
+    const s = createSim(ir);
+    for (let i = 0; i < 4; i++) step(s);
+    expect(s.cur[0]).toBe(0); // состояние после включения питания
+    s.switches[0] = 1;
+    for (let i = 0; i < 3; i++) step(s);
+    expect(s.cur[0]).toBe(1); // узел 0 прижат к 1
+    expect(s.cur[1]).toBe(0); // второй инвертор даёт противоположное
+    s.switches[0] = 0;
+    for (let i = 0; i < 3; i++) step(s);
+    expect(s.cur[0]).toBe(1); // бит удержался после снятия источника
+    expect(s.cur[1]).toBe(0);
   });
 });
 

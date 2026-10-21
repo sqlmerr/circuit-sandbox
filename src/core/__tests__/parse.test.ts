@@ -562,9 +562,10 @@ describe("parse: 1-входный гейт (крест) — ориентация
       step(s);
       trace.push(s.cur[ir.gates[0].out]);
     }
-    for (let i = 1; i < trace.length; i++) {
-      expect(trace[i]).toBe(trace[i - 1] === 1 ? 0 : 1);
-    }
+    // Кольцо из двух инверторов — бистабильное (ячейка SRAM): состояние
+    // устойчиво, а не мигает.
+    const held = trace.slice(2);
+    for (const v of held) expect(v).toBe(held[0]);
   });
 
   it("маркер выхода по-прежнему важнее разводки (explicit-режим)", () => {

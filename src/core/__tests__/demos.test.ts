@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { parse } from "../parse";
 import { createSim, step } from "../sim";
-import { ringNot } from "../../demos/ringNot";
+import { sramCell } from "../../demos/sramCell";
+import { ringOsc } from "../../demos/ringOsc";
 import { halfAdder } from "../../demos/halfAdder";
 import { rsLatch } from "../../demos/rsLatch";
 import { toggleMemory } from "../../demos/memory";
@@ -38,8 +39,13 @@ describe("demos: registry", () => {
 });
 
 describe("demos: parse clean", () => {
-  it("ringNot parses without errors", () => {
-    const { errors, warnings } = parse(ringNot());
+  it("sramCell parses without errors", () => {
+    const { errors, warnings } = parse(sramCell());
+    expect(errors).toHaveLength(0);
+    expect(warnings).toHaveLength(0);
+  });
+  it("ringOsc parses without errors", () => {
+    const { errors, warnings } = parse(ringOsc());
     expect(errors).toHaveLength(0);
     expect(warnings).toHaveLength(0);
   });
@@ -69,20 +75,51 @@ describe("demos: parse clean", () => {
   });
 });
 
-describe("demos: ringNot oscillates", () => {
-  it("the bulb net alternates every tick (period 2)", () => {
-    const { ir } = parse(ringNot());
+describe("demos: sramCell — кольцо из двух инверторов держит бит", () => {
+  it("SET пишет 1, RESET сбрасывает, между нажатиями бит удерживается", () => {
+    const { ir } = parse(sramCell());
+    expect(ir.gates).toHaveLength(2);
+    expect(ir.switches).toHaveLength(2);
     expect(ir.bulbs).toHaveLength(1);
     const s = createSim(ir);
-    const bulbNet = ir.bulbs[0].net;
+    const bulb = ir.bulbs[0].net;
+    // SET тянет узел Q к 1 (это сеть лампочки), RESET — противоположный узел.
+    const setIdx = ir.switches.findIndex((sw) => sw.net === bulb);
+    const resetIdx = ir.switches.findIndex((sw) => sw.net !== bulb);
+    const run = (n: number) => {
+      for (let t = 0; t < n; t++) step(s);
+    };
+    run(4);
+    expect(s.cur[bulb]).toBe(0); // состояние после включения питания
+    s.switches[setIdx] = 1;
+    run(3);
+    expect(s.cur[bulb]).toBe(1); // записали 1
+    s.switches[setIdx] = 0;
+    run(3);
+    expect(s.cur[bulb]).toBe(1); // бит удержался
+    s.switches[resetIdx] = 1;
+    run(3);
+    expect(s.cur[bulb]).toBe(0); // сбросили
+    s.switches[resetIdx] = 0;
+    run(3);
+    expect(s.cur[bulb]).toBe(0); // и снова удержался
+  });
+});
+
+describe("demos: ringOsc — кольцевой генератор", () => {
+  it("волна бежит по кольцу: период 6 тиков (2 × 3 инвертора)", () => {
+    const { ir } = parse(ringOsc());
+    expect(ir.gates).toHaveLength(3);
+    expect(ir.bulbs).toHaveLength(1);
+    const s = createSim(ir);
+    const bulb = ir.bulbs[0].net;
     const trace: number[] = [];
-    for (let t = 0; t < 8; t++) {
+    for (let t = 0; t < 14; t++) {
+      trace.push(s.cur[bulb]);
       step(s);
-      trace.push(s.cur[bulbNet]);
     }
-    for (let i = 1; i < trace.length; i++) {
-      expect(trace[i]).toBe(trace[i - 1] === 1 ? 0 : 1);
-    }
+    for (let i = 6; i < trace.length; i++) expect(trace[i]).toBe(trace[i - 6]);
+    expect(trace.slice(0, 6)).not.toEqual(trace.slice(1, 7));
   });
 });
 
@@ -94,13 +131,14 @@ describe("demos: halfAdder truth table", () => {
     [1, 1, 0, 1],
   ])("A=%i B=%i -> sum=%i carry=%i", (a, b, sum, carry) => {
     const { ir } = parse(halfAdder());
-    // consts в порядке сканирования: HIGH_A (y2) первым, HIGH_B (y8) вторым
-    expect(ir.consts).toHaveLength(2);
-    ir.consts[0].value = a as 0 | 1;
-    ir.consts[1].value = b as 0 | 1;
+    // switches в порядке сканирования: SWITCH_A (y2) первым, SWITCH_B (y8) вторым
+    expect(ir.switches).toHaveLength(2);
     // bulbs: S (y2) первым, C (y8) вторым
     expect(ir.bulbs).toHaveLength(2);
     const s = createSim(ir);
+    // Переключатели — источники с рантайм-значением (клик в run-режиме).
+    s.switches[0] = a as 0 | 1;
+    s.switches[1] = b as 0 | 1;
     for (let t = 0; t < 4; t++) step(s);
     expect(s.cur[ir.bulbs[0].net]).toBe(sum);
     expect(s.cur[ir.bulbs[1].net]).toBe(carry);
