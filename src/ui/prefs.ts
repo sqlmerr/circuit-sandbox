@@ -12,7 +12,9 @@ export const UI_SCALE_MAX = 1.6;
 export const UI_SCALE_STEP = 0.1;
 
 export function defaultPrefs(): UiPrefs {
-  return { collapsed: {}, uiScale: 1, uiHidden: false, tool: "brush" };
+  // «Демо» по умолчанию свёрнута: список схем длинный и при первом входе
+  // занимал бы весь левый док. Пользователь может раскрыть — выбор запомнится.
+  return { collapsed: { demos: true }, uiScale: 1, uiHidden: false, tool: "brush" };
 }
 
 export function loadPrefs(): UiPrefs {
@@ -21,7 +23,8 @@ export function loadPrefs(): UiPrefs {
     if (!raw) return defaultPrefs();
     const p = JSON.parse(raw) as Partial<UiPrefs>;
     return {
-      collapsed: p.collapsed ?? {},
+      // старые prefs без ключа demos тоже получают свёрнутую панель
+      collapsed: { demos: true, ...(p.collapsed ?? {}) },
       uiScale: clampScale(p.uiScale ?? 1),
       uiHidden: p.uiHidden ?? false,
       tool: p.tool === "stamp" || p.tool === "pipette" || p.tool === "brush" ? p.tool : "brush",

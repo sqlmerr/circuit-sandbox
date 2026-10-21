@@ -1,4 +1,4 @@
-import { initState, apply, type State, type Action } from "./state";
+import { initState, apply, MAX_CELL_SCALE, type State, type Action } from "./state";
 import { render } from "./render";
 import { screenToGrid, type Viewport } from "./camera";
 import { buildPanels, type PanelBind } from "./panel";
@@ -415,7 +415,7 @@ function fitView(): void {
   const v = viewport();
   const s = Math.max(
     1,
-    Math.min(32, Math.floor(Math.min(v.cw / state.grid.width, v.ch / state.grid.height))),
+    Math.min(MAX_CELL_SCALE, Math.floor(Math.min(v.cw / state.grid.width, v.ch / state.grid.height))),
   );
   dispatch({
     kind: "setCam",

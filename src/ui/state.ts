@@ -21,6 +21,11 @@ export interface Camera {
   oy: number;
 }
 
+// Границы зума в пикселях на клетку. Верхняя граница нужна, чтобы можно было
+// рассмотреть отдельные пиксели схемы (раньше упиралась в 32 px/клетку).
+export const MIN_CELL_SCALE = 1;
+export const MAX_CELL_SCALE = 128;
+
 export interface SimView {
   running: boolean;
   speed: number;
@@ -116,7 +121,7 @@ export function apply(s: State, a: Action): State {
       let newScale = Math.round(s.cam.scale * factor);
       // округление не должно съедать шаг (иначе зум залипает на целом масштабе)
       if (newScale === s.cam.scale) newScale = s.cam.scale + dir;
-      newScale = Math.max(1, Math.min(32, newScale));
+      newScale = Math.max(MIN_CELL_SCALE, Math.min(MAX_CELL_SCALE, newScale));
       if (newScale === s.cam.scale) return s;
       const ratio = newScale / s.cam.scale;
       return {
